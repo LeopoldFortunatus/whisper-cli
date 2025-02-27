@@ -20,7 +20,7 @@ type Segment struct {
 	Text  string  `json:"text"`
 }
 
-// Get the duration of the file using ffprobe
+// GetDuration Get the duration of the file using ffprobe
 func GetDuration(filePath string) (float64, error) {
 	cmd := exec.Command("ffprobe",
 		"-v", "error",
@@ -37,7 +37,7 @@ func GetDuration(filePath string) (float64, error) {
 	return strconv.ParseFloat(str, 64)
 }
 
-// Split the audio file into parts using ffmpeg
+// SplitAudioFile Split the audio file into parts using ffmpeg
 func SplitAudioFile(
 	inputPath string,
 	outputPattern string,
@@ -47,7 +47,7 @@ func SplitAudioFile(
 	return cmd.Run()
 }
 
-// Send the file to Whisper and return JSON with segments
+// TranscribeAudio Send the file to Whisper and return JSON with segments
 func TranscribeAudio(
 	ctx context.Context,
 	client *openai.Client,

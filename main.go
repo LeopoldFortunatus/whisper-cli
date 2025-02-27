@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -63,7 +62,7 @@ func main() {
 		fmt.Printf("Error serializing JSON: %v\n", err)
 		return
 	}
-	if err := ioutil.WriteFile(`combined.json`, data, 0644); err != nil {
+	if err := os.WriteFile(`combined.json`, data, 0644); err != nil {
 		fmt.Printf("Error saving file combined.json: %v\n", err)
 		return
 	}
@@ -75,7 +74,7 @@ func main() {
 		textResult.WriteString(seg.Text)
 		textResult.WriteString("\n")
 	}
-	err = ioutil.WriteFile(`transcription.txt`, []byte(textResult.String()), 0644)
+	err = os.WriteFile(`transcription.txt`, []byte(textResult.String()), 0644)
 	if err != nil {
 		fmt.Printf("Error saving file transcription.txt: %v\n", err)
 		return
