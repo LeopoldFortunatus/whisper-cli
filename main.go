@@ -16,7 +16,6 @@ import (
 
 func main() {
 	inputFile := flag.String("input", "", "Path to the input audio file")
-	language := flag.String("language", "ru", "Language for transcription")
 	flag.Parse()
 
 	// Create a folder named the same as the transcription file but without the extension
@@ -57,7 +56,7 @@ func main() {
 		}
 
 		ctx := context.Background()
-		segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, *language)
+		segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, "ru")
 		if err != nil {
 			log.Fatal().Err(err).Msgf("Error during transcription: %s", chunkFile)
 		}
