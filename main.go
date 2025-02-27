@@ -1,28 +1,18 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
-	"strconv"
 	"strings"
 
+	"github.com/arykalin/whisper-cli/whisper"
 	"github.com/openai/openai-go"
 	"github.com/rs/zerolog/log"
-	"whisper"
 )
-
-type Segment struct {
-	Start float64 `json:"start"`
-	End   float64 `json:"end"`
-	Text  string  `json:"text"`
-}
 
 func main() {
 	inputFile := flag.String("input", "./whisper/audio/2025_02_15_диспут_Чегон_нельзя_делать_с_Мифом.m4a", "Path to the input audio file")
@@ -31,7 +21,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("Splitting the audio file into parts...")
-	err := whisper.splitAudioFile(*inputFile, *outputPattern)
+	err := whisper.SplitAudioFile(*inputFile, *outputPattern)
 	if err != nil {
 		fmt.Printf("Error splitting file: %v\n", err)
 		return
@@ -40,7 +30,7 @@ func main() {
 	// Initialize the client based on the environment variable
 	client := openai.NewClient()
 
-	var allSegments []Segment
+	var allSegments []whisper.Segment
 	offset := 0.0
 
 	for i := 0; ; i++ {
@@ -50,14 +40,14 @@ func main() {
 		}
 
 		// Get the duration of the current chunk
-		dur, err := whisper.getDuration(chunkFile)
+		dur, err := whisper.GetDuration(chunkFile)
 		if err != nil {
 			fmt.Printf("Failed to get duration of file %s: %v\n", chunkFile, err)
 			break
 		}
 
 		ctx := context.Background()
-		segments, err := whisper.transcribeAudio(ctx, client, chunkFile, offset, *language)
+		segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, *language)
 		if err != nil {
 			log.Fatal().Err(err).Msgf("Error during transcription: %s", chunkFile)
 		}

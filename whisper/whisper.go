@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
-	"github.com/rs/zerolog/log"
 )
 
 type Segment struct {
@@ -22,7 +21,7 @@ type Segment struct {
 }
 
 // Get the duration of the file using ffprobe
-func getDuration(filePath string) (float64, error) {
+func GetDuration(filePath string) (float64, error) {
 	cmd := exec.Command("ffprobe",
 		"-v", "error",
 		"-show_entries", "format=duration",
@@ -39,14 +38,23 @@ func getDuration(filePath string) (float64, error) {
 }
 
 // Split the audio file into parts using ffmpeg
-func splitAudioFile(inputPath string, outputPattern string) error {
+func SplitAudioFile(
+	inputPath string,
+	outputPattern string,
+) error {
 	cmd := exec.Command("ffmpeg", "-i", inputPath, "-f", "segment",
 		"-segment_time", "600", "-c", "copy", outputPattern)
 	return cmd.Run()
 }
 
 // Send the file to Whisper and return JSON with segments
-func transcribeAudio(ctx context.Context, client *openai.Client, filePath string, offset float64, language string) ([]Segment, error) {
+func TranscribeAudio(
+	ctx context.Context,
+	client *openai.Client,
+	filePath string,
+	offset float64,
+	language string,
+) ([]Segment, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening file: %v", err)
