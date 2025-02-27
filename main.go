@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -26,12 +27,24 @@ type Segment struct {
 
 func main() {
 	inputFile := flag.String("input", "./whisper/audio/2025_02_15_диспут_Чегон_нельзя_делать_с_Мифом.m4a", "Path to the input audio file")
-	outputPattern := flag.String("output", "./whisper/audio/chunk/chunk_%03d.m4a", "Pattern for the output audio chunks")
 	language := flag.String("language", "ru", "Language for transcription")
 	flag.Parse()
 
+	// Extract the base name of the input file without extension
+	baseName := strings.TrimSuffix(filepath.Base(*inputFile), filepath.Ext(*inputFile))
+
+	// Create a directory with the base name
+	outputDir := filepath.Join(filepath.Dir(*inputFile), baseName)
+	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
+		fmt.Printf("Error creating directory: %v\n", err)
+		return
+	}
+
+	// Set outputPattern to save chunks in the newly created directory
+	outputPattern := filepath.Join(outputDir, "chunk_%03d.m4a")
+
 	fmt.Println("Splitting the audio file into parts...")
-	err := whisper.splitAudioFile(*inputFile, *outputPattern)
+	err := whisper.splitAudioFile(*inputFile, outputPattern)
 	if err != nil {
 		fmt.Printf("Error splitting file: %v\n", err)
 		return
@@ -44,7 +57,7 @@ func main() {
 	offset := 0.0
 
 	for i := 0; ; i++ {
-		chunkFile := fmt.Sprintf(*outputPattern, i)
+		chunkFile := fmt.Sprintf(outputPattern, i)
 		if _, err := os.Stat(chunkFile); os.IsNotExist(err) {
 			break
 		}
@@ -73,7 +86,7 @@ func main() {
 		fmt.Printf("Error serializing JSON: %v\n", err)
 		return
 	}
-	if err := ioutil.WriteFile(`combined.json`, data, 0644); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(outputDir, `combined.json`), data, 0644); err != nil {
 		fmt.Printf("Error saving file combined.json: %v\n", err)
 		return
 	}
@@ -85,7 +98,7 @@ func main() {
 		textResult.WriteString(seg.Text)
 		textResult.WriteString("\n")
 	}
-	err = ioutil.WriteFile(`transcription.txt`, []byte(textResult.String()), 0644)
+	err = ioutil.WriteFile(filepath.Join(outputDir, `transcription.txt`), []byte(textResult.String()), 0644)
 	if err != nil {
 		fmt.Printf("Error saving file transcription.txt: %v\n", err)
 		return

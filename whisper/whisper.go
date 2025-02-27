@@ -39,7 +39,12 @@ func getDuration(filePath string) (float64, error) {
 }
 
 // Split the audio file into parts using ffmpeg
-func splitAudioFile(inputPath string, outputPattern string) error {
+func splitAudioFile(inputPath string, outputPattern string, outputDir string) error {
+	// Create the output directory if it does not exist
+	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
+		return fmt.Errorf("error creating directory: %v", err)
+	}
+
 	cmd := exec.Command("ffmpeg", "-i", inputPath, "-f", "segment",
 		"-segment_time", "600", "-c", "copy", outputPattern)
 	return cmd.Run()
