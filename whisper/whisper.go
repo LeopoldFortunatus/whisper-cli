@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -42,6 +43,13 @@ func SplitAudioFile(
 	inputPath string,
 	outputPattern string,
 ) error {
+	// Create the output directory if it doesn't exist
+	outputDir := filepath.Dir(outputPattern)
+	err := os.MkdirAll(outputDir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("error creating output directory: %v", err)
+	}
+
 	cmd := exec.Command("ffmpeg", "-i", inputPath, "-f", "segment",
 		"-segment_time", "600", "-c", "copy", outputPattern)
 	return cmd.Run()

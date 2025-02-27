@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/arykalin/whisper-cli/whisper"
@@ -15,12 +16,23 @@ import (
 
 func main() {
 	inputFile := flag.String("input", "./whisper/audio/2025_02_15_диспут_Чегон_нельзя_делать_с_Мифом.m4a", "Path to the input audio file")
-	outputPattern := flag.String("output", "./whisper/audio/chunk/chunk_%03d.m4a", "Pattern for the output audio chunks")
+	outputPattern := flag.String("output", "", "Pattern for the output audio chunks")
 	language := flag.String("language", "ru", "Language for transcription")
 	flag.Parse()
 
+	// Create a folder named the same as the transcription file but without the extension
+	outputDir := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile))
+	err := os.MkdirAll(outputDir, os.ModePerm)
+	if err != nil {
+		fmt.Printf("Error creating output directory: %v\n", err)
+		return
+	}
+
+	// Update the outputPattern to save chunks in the created folder
+	*outputPattern = filepath.Join(outputDir, "chunk_%03d.m4a")
+
 	fmt.Println("Splitting the audio file into parts...")
-	err := whisper.SplitAudioFile(*inputFile, *outputPattern)
+	err = whisper.SplitAudioFile(*inputFile, *outputPattern)
 	if err != nil {
 		fmt.Printf("Error splitting file: %v\n", err)
 		return
@@ -62,7 +74,7 @@ func main() {
 		fmt.Printf("Error serializing JSON: %v\n", err)
 		return
 	}
-	if err := os.WriteFile(`combined.json`, data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(outputDir, `combined.json`), data, 0644); err != nil {
 		fmt.Printf("Error saving file combined.json: %v\n", err)
 		return
 	}
@@ -74,7 +86,7 @@ func main() {
 		textResult.WriteString(seg.Text)
 		textResult.WriteString("\n")
 	}
-	err = os.WriteFile(`transcription.txt`, []byte(textResult.String()), 0644)
+	err = os.WriteFile(filepath.Join(outputDir, `transcription.txt`), []byte(textResult.String()), 0644)
 	if err != nil {
 		fmt.Printf("Error saving file transcription.txt: %v\n", err)
 		return
