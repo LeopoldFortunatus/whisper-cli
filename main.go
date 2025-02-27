@@ -15,8 +15,7 @@ import (
 )
 
 func main() {
-	inputFile := flag.String("input", "./whisper/audio/2025_02_15_диспут_Чегон_нельзя_делать_с_Мифом.m4a", "Path to the input audio file")
-	outputPattern := flag.String("output", "", "Pattern for the output audio chunks")
+	inputFile := flag.String("input", "", "Path to the input audio file")
 	language := flag.String("language", "ru", "Language for transcription")
 	flag.Parse()
 
@@ -29,10 +28,10 @@ func main() {
 	}
 
 	// Update the outputPattern to save chunks in the created folder
-	*outputPattern = filepath.Join(outputDir, "chunk_%03d.m4a")
+	outputPattern := filepath.Join(outputDir, "chunk_%03d.m4a")
 
 	fmt.Println("Splitting the audio file into parts...")
-	err = whisper.SplitAudioFile(*inputFile, *outputPattern)
+	err = whisper.SplitAudioFile(*inputFile, outputPattern)
 	if err != nil {
 		fmt.Printf("Error splitting file: %v\n", err)
 		return
@@ -45,7 +44,7 @@ func main() {
 	offset := 0.0
 
 	for i := 0; ; i++ {
-		chunkFile := fmt.Sprintf(*outputPattern, i)
+		chunkFile := fmt.Sprintf(outputPattern, i)
 		if _, err := os.Stat(chunkFile); os.IsNotExist(err) {
 			break
 		}
