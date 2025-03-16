@@ -28,7 +28,7 @@ func main() {
 
 	config, err := loadConfig(*configPath)
 	if err != nil {
-		fmt.Printf("Ошибка загрузки конфигурации: %v\n", err)
+		log.Printf("Ошибка загрузки конфигурации: %v\n", err)
 		return
 	}
 
@@ -46,7 +46,7 @@ func main() {
 	outputDir := strings.TrimSuffix(inputFile, filepath.Ext(inputFile))
 	err = os.MkdirAll(outputDir, os.ModePerm)
 	if err != nil {
-		fmt.Printf("Error creating output directory: %v\n", err)
+		log.Printf("Error creating output directory: %v\n", err)
 		return
 	}
 
@@ -56,7 +56,7 @@ func main() {
 	fmt.Println("Splitting the audio file into chunks...")
 	err = whisper.SplitAudioFile(inputFile, outputPattern)
 	if err != nil {
-		fmt.Printf("Error splitting file: %v\n", err)
+		log.Printf("Error splitting file: %v\n", err)
 		return
 	}
 
@@ -75,15 +75,42 @@ func main() {
 		// Get the duration of the current chunk
 		dur, err := whisper.GetDuration(chunkFile)
 		if err != nil {
-			fmt.Printf("Failed to get duration of file %s: %v\n", chunkFile, err)
+			log.Printf("Failed to get duration of file %s: %v\n", chunkFile, err)
 			break
 		}
 
 		ctx := context.Background()
-		segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, config.Language)
-		if err != nil {
-			log.Fatal().Err(err).Msgf("Error during transcription: %s", chunkFile)
-		}
+		segments, err := func() ([]whisper.Segment, error) {
+			// Check if intermediate file exists
+			intermediateFile := strings.TrimSuffix(chunkFile, filepath.Ext(chunkFile)) + "_transcription.json"
+			if data, err := os.ReadFile(intermediateFile); err == nil {
+				// File exists, try to unmarshal
+				var segments []whisper.Segment
+				if err := json.Unmarshal(data, &segments); err == nil {
+					log.Printf("Loading existing transcription for %s\n", chunkFile)
+					return segments, nil
+				}
+				// If unmarshalling fails, continue with transcription
+			}
+
+			// Transcribe and save result
+			segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, config.Language)
+			if err != nil {
+				return nil, err
+			}
+
+			// Save intermediate result
+			data, err := json.MarshalIndent(segments, "", "  ")
+			if err != nil {
+				log.Printf("Warning: Failed to serialize intermediate result: %v\n", err)
+			} else {
+				if err := os.WriteFile(intermediateFile, data, 0644); err != nil {
+					log.Printf("Warning: Failed to save intermediate result: %v\n", err)
+				}
+			}
+
+			return segments, nil
+		}()
 		allSegments = append(allSegments, segments...)
 
 		// Increase the offset by the duration of the k-th chunk
@@ -93,11 +120,11 @@ func main() {
 	// Serialize all segments into a single JSON
 	data, err := json.MarshalIndent(allSegments, "", "  ")
 	if err != nil {
-		fmt.Printf("Error serializing JSON: %v\n", err)
+		log.Printf("Error serializing JSON: %v\n", err)
 		return
 	}
 	if err := os.WriteFile(filepath.Join(outputDir, `transcription.json`), data, 0644); err != nil {
-		fmt.Printf("Error saving file transcription.json: %v\n", err)
+		log.Printf("Error saving file transcription.json: %v\n", err)
 		return
 	}
 	fmt.Println("Combined JSON saved to file `transcription.json`")
@@ -110,7 +137,7 @@ func main() {
 	}
 	err = os.WriteFile(filepath.Join(outputDir, "transcription.txt"), []byte(textResult.String()), 0644)
 	if err != nil {
-		fmt.Printf("Error saving file transcription.txt: %v\n", err)
+		log.Printf("Error saving file transcription.txt: %v\n", err)
 		return
 	}
 	fmt.Println("Overall text saved to file `transcription.txt`")
@@ -129,7 +156,7 @@ func main() {
 	// writing the result to a file
 	outputPath := filepath.Join(outputDir, "transcription_with_timestamps.txt")
 	if err := os.WriteFile(outputPath, []byte(result.String()), 0644); err != nil {
-		fmt.Printf("Ошибка при записи файла: %v\n", err)
+		log.Printf("Ошибка при записи файла: %v\n", err)
 		return
 	}
 }
