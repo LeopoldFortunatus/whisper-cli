@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,12 +15,6 @@ import (
 
 	"github.com/openai/openai-go"
 )
-
-type Segment struct {
-	Start float64 `json:"start"`
-	End   float64 `json:"end"`
-	Text  string  `json:"text"`
-}
 
 // GetDuration Get the duration of the file using ffprobe
 func GetDuration(filePath string) (float64, error) {
@@ -67,7 +62,12 @@ func TranscribeAudio(
 	if err != nil {
 		return nil, fmt.Errorf("error opening file: %v", err)
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Printf("error closing file: %v", err)
+		}
+	}(f)
 
 	resp, err := client.Audio.Transcriptions.New(ctx, openai.AudioTranscriptionNewParams{
 		File:           openai.F[io.Reader](f),
@@ -82,11 +82,8 @@ func TranscribeAudio(
 		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 
-	// Parse the received JSON, it should contain a structure with an array of segments
-	var result struct {
-		Segments []Segment `json:"segments"`
-	}
-	err = json.Unmarshal([]byte(resp.Text), &result)
+	var result WhisperResponse
+	err = json.Unmarshal([]byte(resp.JSON.RawJSON()), &result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %v", err)
 	}
