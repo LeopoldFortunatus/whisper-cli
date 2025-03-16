@@ -106,7 +106,7 @@ func main() {
 	}
 }
 
-func makeAllSegments(outputPattern string, config string) []whisper.Segment {
+func makeAllSegments(outputPattern string, language string) []whisper.Segment {
 	// Initialize the client based on the environment variable
 	client := openai.NewClient()
 
@@ -127,7 +127,7 @@ func makeAllSegments(outputPattern string, config string) []whisper.Segment {
 		}
 
 		ctx := context.Background()
-		segments, err := makeSegments(ctx, chunkFile, client, offset, config.Language)
+		segments, err := makeSegments(ctx, chunkFile, client, offset, language)
 		if err != nil {
 			log.Printf("Error transcribing file %s: %v\n", chunkFile, err)
 			break
