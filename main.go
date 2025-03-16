@@ -80,37 +80,11 @@ func main() {
 		}
 
 		ctx := context.Background()
-		segments, err := func() ([]whisper.Segment, error) {
-			// Check if intermediate file exists
-			intermediateFile := strings.TrimSuffix(chunkFile, filepath.Ext(chunkFile)) + "_transcription.json"
-			if data, err := os.ReadFile(intermediateFile); err == nil {
-				// File exists, try to unmarshal
-				var segments []whisper.Segment
-				if err := json.Unmarshal(data, &segments); err == nil {
-					log.Printf("Loading existing transcription for %s\n", chunkFile)
-					return segments, nil
-				}
-				// If unmarshalling fails, continue with transcription
-			}
-
-			// Transcribe and save result
-			segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, config.Language)
-			if err != nil {
-				return nil, err
-			}
-
-			// Save intermediate result
-			data, err := json.MarshalIndent(segments, "", "  ")
-			if err != nil {
-				log.Printf("Warning: Failed to serialize intermediate result: %v\n", err)
-			} else {
-				if err := os.WriteFile(intermediateFile, data, 0644); err != nil {
-					log.Printf("Warning: Failed to save intermediate result: %v\n", err)
-				}
-			}
-
-			return segments, nil
-		}()
+		segments, err := makeSegments(ctx, chunkFile, client, offset, config.Language)
+		if err != nil {
+			log.Printf("Error transcribing file %s: %v\n", chunkFile, err)
+			break
+		}
 		allSegments = append(allSegments, segments...)
 
 		// Increase the offset by the duration of the k-th chunk
@@ -185,4 +159,42 @@ func loadConfig(configPath string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+func makeSegments(
+	ctx context.Context,
+	chunkFile string,
+	client *openai.Client,
+	offset float64,
+	language string,
+) ([]whisper.Segment, error) {
+	// Check if intermediate file exists
+	intermediateFile := strings.TrimSuffix(chunkFile, filepath.Ext(chunkFile)) + "_transcription.json"
+	if data, err := os.ReadFile(intermediateFile); err == nil {
+		// File exists, try to unmarshal
+		var segments []whisper.Segment
+		if err := json.Unmarshal(data, &segments); err == nil {
+			log.Printf("Loading existing transcription for %s\n", chunkFile)
+			return segments, nil
+		}
+		// If unmarshalling fails, continue with transcription
+	}
+
+	// Transcribe and save result
+	segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, language)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save intermediate result
+	data, err := json.MarshalIndent(segments, "", "  ")
+	if err != nil {
+		log.Printf("Warning: Failed to serialize intermediate result: %v\n", err)
+	} else {
+		if err := os.WriteFile(intermediateFile, data, 0644); err != nil {
+			log.Printf("Warning: Failed to save intermediate result: %v\n", err)
+		}
+	}
+
+	return segments, nil
 }
