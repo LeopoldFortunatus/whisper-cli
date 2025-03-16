@@ -13,15 +13,38 @@ import (
 	"github.com/arykalin/whisper-cli/whisper"
 	"github.com/openai/openai-go"
 	"github.com/rs/zerolog/log"
+	"gopkg.in/yaml.v3"
 )
 
+type Config struct {
+	InputFile string `yaml:"input_file"`
+	Language  string `yaml:"language,omitempty"` // Optional language field
+}
+
 func main() {
-	inputFile := flag.String("input", "", "Path to the input audio file")
+	configPath := flag.String("config", "config.yaml", "Path to the config file")
+	inputFlag := flag.String("input", "", "Path to the input audio file")
 	flag.Parse()
 
-	// Create a folder named the same as the transcription file but without the extension
-	outputDir := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile))
-	err := os.MkdirAll(outputDir, os.ModePerm)
+	config, err := loadConfig(*configPath)
+	if err != nil {
+		fmt.Printf("Ошибка загрузки конфигурации: %v\n", err)
+		return
+	}
+
+	// If the input file is not provided in the config, check the command line flag
+	inputFile := config.InputFile
+	if *inputFlag != "" {
+		inputFile = *inputFlag
+	}
+
+	if inputFile == "" {
+		log.Fatal().Msg("No input file specified. Use -input flag or set input_file in config.yaml.")
+	}
+
+	// Create the output directory based on the input file name
+	outputDir := strings.TrimSuffix(inputFile, filepath.Ext(inputFile))
+	err = os.MkdirAll(outputDir, os.ModePerm)
 	if err != nil {
 		fmt.Printf("Error creating output directory: %v\n", err)
 		return
@@ -30,8 +53,8 @@ func main() {
 	// Update the outputPattern to save chunks in the created folder
 	outputPattern := filepath.Join(outputDir, "chunk_%03d.m4a")
 
-	fmt.Println("Splitting the audio file into parts...")
-	err = whisper.SplitAudioFile(*inputFile, outputPattern)
+	fmt.Println("Splitting the audio file into chunks...")
+	err = whisper.SplitAudioFile(inputFile, outputPattern)
 	if err != nil {
 		fmt.Printf("Error splitting file: %v\n", err)
 		return
@@ -57,7 +80,7 @@ func main() {
 		}
 
 		ctx := context.Background()
-		segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, "ru")
+		segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, config.Language)
 		if err != nil {
 			log.Fatal().Err(err).Msgf("Error during transcription: %s", chunkFile)
 		}
@@ -85,7 +108,7 @@ func main() {
 		textResult.WriteString(seg.Text)
 		textResult.WriteString("\n")
 	}
-	err = os.WriteFile(filepath.Join(outputDir, `transcription.txt`), []byte(textResult.String()), 0644)
+	err = os.WriteFile(filepath.Join(outputDir, "transcription.txt"), []byte(textResult.String()), 0644)
 	if err != nil {
 		fmt.Printf("Error saving file transcription.txt: %v\n", err)
 		return
@@ -109,7 +132,6 @@ func main() {
 		fmt.Printf("Ошибка при записи файла: %v\n", err)
 		return
 	}
-
 }
 
 func formatTimestamp(seconds float64) string {
@@ -118,4 +140,22 @@ func formatTimestamp(seconds float64) string {
 	minutes := int(duration.Minutes()) % 60
 	secs := int(duration.Seconds()) % 60
 	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, secs)
+}
+
+func loadConfig(configPath string) (*Config, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading config file: %w", err)
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("error unmarshalling config: %w", err)
+	}
+
+	if config.Language == "" {
+		config.Language = "ru"
+	}
+
+	return &config, nil
 }
