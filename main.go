@@ -60,36 +60,7 @@ func main() {
 		return
 	}
 
-	// Initialize the client based on the environment variable
-	client := openai.NewClient()
-
-	var allSegments []whisper.Segment
-	offset := 0.0
-
-	for i := 0; ; i++ {
-		chunkFile := fmt.Sprintf(outputPattern, i)
-		if _, err := os.Stat(chunkFile); os.IsNotExist(err) {
-			break
-		}
-
-		// Get the duration of the current chunk
-		dur, err := whisper.GetDuration(chunkFile)
-		if err != nil {
-			log.Printf("Failed to get duration of file %s: %v\n", chunkFile, err)
-			break
-		}
-
-		ctx := context.Background()
-		segments, err := makeSegments(ctx, chunkFile, client, offset, config.Language)
-		if err != nil {
-			log.Printf("Error transcribing file %s: %v\n", chunkFile, err)
-			break
-		}
-		allSegments = append(allSegments, segments...)
-
-		// Increase the offset by the duration of the k-th chunk
-		offset += dur
-	}
+	allSegments := makeAllSegments(outputPattern, config.Language)
 
 	// Serialize all segments into a single JSON
 	data, err := json.MarshalIndent(allSegments, "", "  ")
@@ -133,6 +104,40 @@ func main() {
 		log.Printf("Ошибка при записи файла: %v\n", err)
 		return
 	}
+}
+
+func makeAllSegments(outputPattern string, config string) []whisper.Segment {
+	// Initialize the client based on the environment variable
+	client := openai.NewClient()
+
+	var allSegments []whisper.Segment
+	offset := 0.0
+
+	for i := 0; ; i++ {
+		chunkFile := fmt.Sprintf(outputPattern, i)
+		if _, err := os.Stat(chunkFile); os.IsNotExist(err) {
+			break
+		}
+
+		// Get the duration of the current chunk
+		dur, err := whisper.GetDuration(chunkFile)
+		if err != nil {
+			log.Printf("Failed to get duration of file %s: %v\n", chunkFile, err)
+			break
+		}
+
+		ctx := context.Background()
+		segments, err := makeSegments(ctx, chunkFile, client, offset, config.Language)
+		if err != nil {
+			log.Printf("Error transcribing file %s: %v\n", chunkFile, err)
+			break
+		}
+		allSegments = append(allSegments, segments...)
+
+		// Increase the offset by the duration of the k-th chunk
+		offset += dur
+	}
+	return allSegments
 }
 
 func formatTimestamp(seconds float64) string {
