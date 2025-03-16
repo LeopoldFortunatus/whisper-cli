@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/arykalin/whisper-cli/whisper"
 	"github.com/openai/openai-go"
@@ -72,11 +73,11 @@ func main() {
 		fmt.Printf("Error serializing JSON: %v\n", err)
 		return
 	}
-	if err := os.WriteFile(filepath.Join(outputDir, `combined.json`), data, 0644); err != nil {
-		fmt.Printf("Error saving file combined.json: %v\n", err)
+	if err := os.WriteFile(filepath.Join(outputDir, `transcription.json`), data, 0644); err != nil {
+		fmt.Printf("Error saving file transcription.json: %v\n", err)
 		return
 	}
-	fmt.Println("Combined JSON saved to file `combined.json`")
+	fmt.Println("Combined JSON saved to file `transcription.json`")
 
 	// Additionally, collect the overall text
 	var textResult strings.Builder
@@ -90,4 +91,31 @@ func main() {
 		return
 	}
 	fmt.Println("Overall text saved to file `transcription.txt`")
+
+	// Create a text file with timestamps
+	var result strings.Builder
+	for _, segment := range allSegments {
+		// Convert seconds to HH:MM:SS format
+		startTime := formatTimestamp(segment.Start)
+		endTime := formatTimestamp(segment.End)
+
+		// Add timestamp and segment text
+		result.WriteString(fmt.Sprintf("[%s - %s] %s\n", startTime, endTime, segment.Text))
+	}
+
+	// writing the result to a file
+	outputPath := filepath.Join(outputDir, "transcription_with_timestamps.txt")
+	if err := os.WriteFile(outputPath, []byte(result.String()), 0644); err != nil {
+		fmt.Printf("Ошибка при записи файла: %v\n", err)
+		return
+	}
+
+}
+
+func formatTimestamp(seconds float64) string {
+	duration := time.Duration(seconds * float64(time.Second))
+	hours := int(duration.Hours())
+	minutes := int(duration.Minutes()) % 60
+	secs := int(duration.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, secs)
 }

@@ -38,6 +38,7 @@ func SplitAudioFile(
 	inputPath string,
 	outputPattern string,
 ) error {
+	log.Printf("Splitting file: %s", inputPath)
 	// Create the output directory if it doesn't exist
 	outputDir := filepath.Dir(outputPattern)
 	err := os.MkdirAll(outputDir, os.ModePerm)
@@ -58,6 +59,7 @@ func TranscribeAudio(
 	offset float64,
 	language string,
 ) ([]Segment, error) {
+	log.Printf("Transcribing file: %s", filePath)
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening file: %v", err)
