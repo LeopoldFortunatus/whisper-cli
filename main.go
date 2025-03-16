@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/arykalin/whisper-cli/whisper"
@@ -60,7 +63,14 @@ func main() {
 		return
 	}
 
-	allSegments := makeAllSegments(outputPattern, config.Language)
+	ctx := context.Background()
+	client := openai.NewClient()
+	allSegments := makeAllSegmentsParallel(
+		ctx,
+		outputPattern,
+		config.Language,
+		client,
+	)
 
 	// Serialize all segments into a single JSON
 	data, err := json.MarshalIndent(allSegments, "", "  ")
@@ -106,11 +116,23 @@ func main() {
 	}
 }
 
-func makeAllSegments(outputPattern string, language string) []whisper.Segment {
-	// Initialize the client based on the environment variable
-	client := openai.NewClient()
-
+func makeAllSegmentsParallel(
+	ctx context.Context,
+	outputPattern string,
+	language string,
+	client *openai.Client,
+) []whisper.Segment {
 	var allSegments []whisper.Segment
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// First, collect all files and their offsets
+	type chunkInfo struct {
+		path   string
+		offset float64
+	}
+
+	var chunks []chunkInfo
 	offset := 0.0
 
 	for i := 0; ; i++ {
@@ -119,24 +141,61 @@ func makeAllSegments(outputPattern string, language string) []whisper.Segment {
 			break
 		}
 
-		// Get the duration of the current chunk
 		dur, err := whisper.GetDuration(chunkFile)
 		if err != nil {
-			log.Printf("Failed to get duration of file %s: %v\n", chunkFile, err)
+			log.Error().Err(err).Str("file", chunkFile).Msg("Failed to get duration")
 			break
 		}
 
-		ctx := context.Background()
-		segments, err := makeSegments(ctx, chunkFile, client, offset, language)
-		if err != nil {
-			log.Printf("Error transcribing file %s: %v\n", chunkFile, err)
-			break
-		}
-		allSegments = append(allSegments, segments...)
+		chunks = append(chunks, chunkInfo{
+			path:   chunkFile,
+			offset: offset,
+		})
 
-		// Increase the offset by the duration of the k-th chunk
 		offset += dur
 	}
+
+	// Now process them in parallel with a worker pool
+	workerCount := runtime.NumCPU()
+	if workerCount > len(chunks) {
+		workerCount = len(chunks)
+	}
+
+	jobs := make(chan chunkInfo, len(chunks))
+
+	// Start workers
+	for w := 0; w < workerCount; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for chunk := range jobs {
+				segments, err := makeSegments(ctx, chunk.path, client, chunk.offset, language)
+				if err != nil {
+					log.Error().Err(err).Str("file", chunk.path).Msg("Error transcribing file")
+					continue
+				}
+
+				mu.Lock()
+				allSegments = append(allSegments, segments...)
+				mu.Unlock()
+			}
+		}()
+	}
+
+	// Send jobs
+	for _, chunk := range chunks {
+		jobs <- chunk
+	}
+	close(jobs)
+
+	// Wait for completion
+	wg.Wait()
+
+	// Sort segments by start time
+	sort.Slice(allSegments, func(i, j int) bool {
+		return allSegments[i].Start < allSegments[j].Start
+	})
+
 	return allSegments
 }
 
