@@ -21,7 +21,8 @@ import (
 
 type Config struct {
 	InputFile string `yaml:"input_file"`
-	Language  string `yaml:"language,omitempty"` // Optional language field
+	Language  string `yaml:"language,omitempty"`   // Optional language field
+	OutPutDir string `yaml:"output_dir,omitempty"` // Optional output directory
 }
 
 func main() {
@@ -46,7 +47,7 @@ func main() {
 	}
 
 	// Create the output directory based on the input file name
-	outputDir := strings.TrimSuffix(inputFile, filepath.Ext(inputFile))
+	outputDir := fmt.Sprintf("%s/%s", config.OutPutDir, strings.TrimSuffix(inputFile, filepath.Ext(inputFile)))
 	err = os.MkdirAll(outputDir, os.ModePerm)
 	if err != nil {
 		log.Printf("Error creating output directory: %v\n", err)
@@ -109,7 +110,8 @@ func main() {
 	}
 
 	// writing the result to a file
-	outputPath := filepath.Join(outputDir, "transcription_with_timestamps.txt")
+	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + ".txt"
+	outputPath := filepath.Join(outputDir, outputFile)
 	if err := os.WriteFile(outputPath, []byte(result.String()), 0644); err != nil {
 		log.Printf("Ошибка при записи файла: %v\n", err)
 		return
@@ -220,6 +222,10 @@ func loadConfig(configPath string) (*Config, error) {
 
 	if config.Language == "" {
 		config.Language = "ru"
+	}
+
+	if config.OutPutDir == "" {
+		config.OutPutDir = "output"
 	}
 
 	return &config, nil
