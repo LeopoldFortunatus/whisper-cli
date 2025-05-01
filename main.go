@@ -46,8 +46,9 @@ func main() {
 		log.Fatal().Msg("No input file specified. Use -input flag or set input_file in config.yaml.")
 	}
 
-	// Create the output directory based on the input file name
-	outputDir := fmt.Sprintf("%s/%s", config.OutPutDir, strings.TrimSuffix(inputFile, filepath.Ext(inputFile)))
+	// Extract just the base filename without extension
+	baseName := filepath.Base(strings.TrimSuffix(inputFile, filepath.Ext(inputFile)))
+	outputDir := filepath.Join(config.OutPutDir, baseName)
 	err = os.MkdirAll(outputDir, os.ModePerm)
 	if err != nil {
 		log.Printf("Error creating output directory: %v\n", err)
@@ -110,7 +111,7 @@ func main() {
 	}
 
 	// writing the result to a file
-	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + ".txt"
+	outputFile := baseName + ".txt"
 	outputPath := filepath.Join(outputDir, outputFile)
 	if err := os.WriteFile(outputPath, []byte(result.String()), 0644); err != nil {
 		log.Printf("Ошибка при записи файла: %v\n", err)
@@ -122,7 +123,7 @@ func makeAllSegmentsParallel(
 	ctx context.Context,
 	outputPattern string,
 	language string,
-	client *openai.Client,
+	client openai.Client,
 ) []whisper.Segment {
 	var allSegments []whisper.Segment
 	var mu sync.Mutex
@@ -234,7 +235,7 @@ func loadConfig(configPath string) (*Config, error) {
 func makeSegments(
 	ctx context.Context,
 	chunkFile string,
-	client *openai.Client,
+	client openai.Client,
 	offset float64,
 	language string,
 ) ([]whisper.Segment, error) {

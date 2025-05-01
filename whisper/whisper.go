@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -14,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/packages/param"
 )
 
 // GetDuration Get the duration of the file using ffprobe
@@ -54,7 +54,7 @@ func SplitAudioFile(
 // TranscribeAudio Send the file to Whisper and return JSON with segments
 func TranscribeAudio(
 	ctx context.Context,
-	client *openai.Client,
+	client openai.Client,
 	filePath string,
 	offset float64,
 	language string,
@@ -72,20 +72,18 @@ func TranscribeAudio(
 	}(f)
 
 	resp, err := client.Audio.Transcriptions.New(ctx, openai.AudioTranscriptionNewParams{
-		File:           openai.F[io.Reader](f),
-		Model:          openai.F(openai.AudioModelWhisper1),
-		Language:       openai.F(language),
-		ResponseFormat: openai.F(openai.AudioResponseFormatVerboseJSON),
-		TimestampGranularities: openai.F([]openai.AudioTranscriptionNewParamsTimestampGranularity{
-			openai.AudioTranscriptionNewParamsTimestampGranularitySegment,
-		}),
+		File:                   f,
+		Model:                  openai.AudioModelWhisper1,
+		Language:               param.NewOpt(language),
+		ResponseFormat:         openai.AudioResponseFormatVerboseJSON,
+		TimestampGranularities: []string{"segment"},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 
 	var result WhisperResponse
-	err = json.Unmarshal([]byte(resp.JSON.RawJSON()), &result)
+	err = json.Unmarshal([]byte(resp.RawJSON()), &result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %v", err)
 	}
