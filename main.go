@@ -19,10 +19,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type chunkInfo struct {
+	number int
+	path   string
+	offset float64
+}
+
 type Config struct {
 	InputFile string `yaml:"input_file"`
 	Language  string `yaml:"language,omitempty"`   // Optional language field
 	OutPutDir string `yaml:"output_dir,omitempty"` // Optional output directory
+	UserGPT4  bool   `yaml:"usergpt4,omitempty"`   // Optional format field
 }
 
 func main() {
@@ -35,6 +42,7 @@ func main() {
 		log.Printf("Ошибка загрузки конфигурации: %v\n", err)
 		return
 	}
+	config.UserGPT4 = false
 
 	// If the input file is not provided in the config, check the command line flag
 	inputFile := config.InputFile
@@ -67,11 +75,12 @@ func main() {
 
 	ctx := context.Background()
 	client := openai.NewClient()
-	allSegments := makeAllSegmentsParallel(
+	allSegments := makeAllParallel(
 		ctx,
 		outputPattern,
 		config.Language,
 		client,
+		config.UserGPT4,
 	)
 
 	// Serialize all segments into a single JSON
@@ -119,22 +128,18 @@ func main() {
 	}
 }
 
-func makeAllSegmentsParallel(
+func makeAllParallel(
 	ctx context.Context,
 	outputPattern string,
 	language string,
 	client openai.Client,
+	textFormat bool,
 ) []whisper.Segment {
 	var allSegments []whisper.Segment
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
 	// First, collect all files and their offsets
-	type chunkInfo struct {
-		path   string
-		offset float64
-	}
-
 	var chunks []chunkInfo
 	offset := 0.0
 
@@ -151,6 +156,7 @@ func makeAllSegmentsParallel(
 		}
 
 		chunks = append(chunks, chunkInfo{
+			number: i,
 			path:   chunkFile,
 			offset: offset,
 		})
@@ -172,7 +178,7 @@ func makeAllSegmentsParallel(
 		go func() {
 			defer wg.Done()
 			for chunk := range jobs {
-				segments, err := makeSegments(ctx, chunk.path, client, chunk.offset, language)
+				segments, err := makeSegments(ctx, chunk, client, language, textFormat)
 				if err != nil {
 					log.Error().Err(err).Str("file", chunk.path).Msg("Error transcribing file")
 					continue
@@ -234,27 +240,43 @@ func loadConfig(configPath string) (*Config, error) {
 
 func makeSegments(
 	ctx context.Context,
-	chunkFile string,
+	chunk chunkInfo,
 	client openai.Client,
-	offset float64,
 	language string,
+	useGpt4 bool,
 ) ([]whisper.Segment, error) {
 	// Check if intermediate file exists
-	intermediateFile := strings.TrimSuffix(chunkFile, filepath.Ext(chunkFile)) + "_transcription.json"
+	intermediateFile := strings.TrimSuffix(chunk.path, filepath.Ext(chunk.path)) + "_transcription.json"
 	if data, err := os.ReadFile(intermediateFile); err == nil {
 		// File exists, try to unmarshal
 		var segments []whisper.Segment
 		if err := json.Unmarshal(data, &segments); err == nil {
-			log.Printf("Loading existing transcription for %s\n", chunkFile)
+			log.Printf("Loading existing transcription for %s\n", chunk.path)
 			return segments, nil
 		}
 		// If unmarshalling fails, continue with transcription
 	}
 
 	// Transcribe and save result
-	segments, err := whisper.TranscribeAudio(ctx, client, chunkFile, offset, language)
-	if err != nil {
-		return nil, err
+	var (
+		segments []whisper.Segment
+		err      error
+	)
+	if useGpt4 {
+		result, err := whisper.TranscribeAudioText(ctx, client, chunk.path, language)
+		if err != nil {
+			return nil, fmt.Errorf("error transcribing file: %v", err)
+		}
+		segments = []whisper.Segment{
+			{
+				Start: float64(chunk.number),
+				Text:  result,
+			},
+		}
+	} else {
+		if segments, err = whisper.TranscribeAudioSRT(ctx, client, chunk.path, chunk.offset, language); err != nil {
+			return nil, fmt.Errorf("error transcribing file: %v", err)
+		}
 	}
 
 	// Save intermediate result

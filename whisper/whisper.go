@@ -51,8 +51,8 @@ func SplitAudioFile(
 	return cmd.Run()
 }
 
-// TranscribeAudio Send the file to Whisper and return JSON with segments
-func TranscribeAudio(
+// TranscribeAudioSRT Send the file to Whisper and return JSON with segments
+func TranscribeAudioSRT(
 	ctx context.Context,
 	client openai.Client,
 	filePath string,
@@ -94,4 +94,36 @@ func TranscribeAudio(
 		result.Segments[i].End += offset
 	}
 	return result.Segments, nil
+}
+
+// TranscribeAudioText Send the file to Whisper and return JSON with segments
+func TranscribeAudioText(
+	ctx context.Context,
+	client openai.Client,
+	filePath string,
+	language string,
+) (string, error) {
+	log.Printf("Transcribing file: %s", filePath)
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("error opening file: %v", err)
+	}
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Printf("error closing file: %v", err)
+		}
+	}(f)
+
+	resp, err := client.Audio.Transcriptions.New(ctx, openai.AudioTranscriptionNewParams{
+		File:           f,
+		Model:          openai.AudioModelGPT4oTranscribe,
+		Language:       param.NewOpt(language),
+		ResponseFormat: openai.AudioResponseFormatJSON,
+	})
+	if err != nil {
+		return "", fmt.Errorf("error sending request: %v", err)
+	}
+
+	return resp.Text, nil
 }
