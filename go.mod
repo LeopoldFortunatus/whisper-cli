@@ -3,7 +3,7 @@ module github.com/arykalin/whisper-cli
 go 1.24.2
 
 require (
-	github.com/openai/openai-go v1.0.0
+	github.com/openai/openai-go v1.8.2
 	github.com/rs/zerolog v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )

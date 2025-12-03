@@ -42,7 +42,7 @@ func main() {
 		log.Printf("Ошибка загрузки конфигурации: %v\n", err)
 		return
 	}
-	config.UserGPT4 = false
+	config.UserGPT4 = true
 
 	// If the input file is not provided in the config, check the command line flag
 	inputFile := config.InputFile
@@ -133,7 +133,7 @@ func makeAllParallel(
 	outputPattern string,
 	language string,
 	client openai.Client,
-	textFormat bool,
+	useGPT4 bool,
 ) []whisper.Segment {
 	var allSegments []whisper.Segment
 	var mu sync.Mutex
@@ -178,7 +178,7 @@ func makeAllParallel(
 		go func() {
 			defer wg.Done()
 			for chunk := range jobs {
-				segments, err := makeSegments(ctx, chunk, client, language, textFormat)
+				segments, err := makeSegments(ctx, chunk, client, language, useGPT4)
 				if err != nil {
 					log.Error().Err(err).Str("file", chunk.path).Msg("Error transcribing file")
 					continue

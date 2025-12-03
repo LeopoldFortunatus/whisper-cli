@@ -48,7 +48,17 @@ func SplitAudioFile(
 
 	cmd := exec.Command("ffmpeg", "-i", inputPath, "-f", "segment",
 		"-segment_time", "600", "-c", "copy", outputPattern)
-	return cmd.Run()
+	//log.Printf("Running command: %s", cmd.String())
+
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	cmd.Stderr = &stderr
+	cmd.Stdout = &stdout
+
+	if err = cmd.Run(); err != nil {
+		return fmt.Errorf("error splitting file: %v\nffmpeg stdout: %s\nffmpeg stderr: %s", err, stdout.String(), stderr.String())
+	}
+	return nil
 }
 
 // TranscribeAudioSRT Send the file to Whisper and return JSON with segments
