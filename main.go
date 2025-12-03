@@ -25,6 +25,10 @@ type chunkInfo struct {
 	offset float64
 }
 
+var supportedAudioExt = map[string]struct{}{
+	".m4a": {},
+}
+
 type Config struct {
 	InputFile string `yaml:"input_file"`
 	Language  string `yaml:"language,omitempty"`   // Optional language field
@@ -45,36 +49,87 @@ func main() {
 	config.UserGPT4 = true
 
 	// If the input file is not provided in the config, check the command line flag
-	inputFile := config.InputFile
+	inputPath := strings.TrimSpace(config.InputFile)
 	if *inputFlag != "" {
-		inputFile = *inputFlag
+		inputPath = *inputFlag
 	}
 
-	if inputFile == "" {
+	if inputPath == "" {
 		log.Fatal().Msg("No input file specified. Use -input flag or set input_file in config.yaml.")
 	}
 
-	// Extract just the base filename without extension
-	baseName := filepath.Base(strings.TrimSuffix(inputFile, filepath.Ext(inputFile)))
-	outputDir := filepath.Join(config.OutPutDir, baseName)
-	err = os.MkdirAll(outputDir, os.ModePerm)
+	inputPath = filepath.Clean(inputPath)
+	inputPath, err = filepath.Abs(inputPath)
 	if err != nil {
-		log.Printf("Error creating output directory: %v\n", err)
+		log.Fatal().Err(err).Msg("Failed to resolve input path")
+	}
+
+	info, err := os.Stat(inputPath)
+	if err != nil {
+		log.Fatal().Err(err).Str("path", inputPath).Msg("Cannot stat input path")
+	}
+
+	ctx := context.Background()
+	client := openai.NewClient()
+
+	if info.IsDir() {
+		files, err := collectAudioFiles(inputPath)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to scan input directory")
+		}
+		if len(files) == 0 {
+			log.Fatal().Msg("Input directory does not contain .m4a audio files")
+		}
+
+		for _, file := range files {
+			if err := processFile(ctx, client, config, file); err != nil {
+				log.Error().Err(err).Str("file", file).Msg("Failed to transcribe file")
+			}
+		}
 		return
+	}
+
+	if err := processFile(ctx, client, config, inputPath); err != nil {
+		log.Fatal().Err(err).Msg("Failed to transcribe input file")
+	}
+}
+
+func processFile(
+	ctx context.Context,
+	client openai.Client,
+	config *Config,
+	inputFile string,
+) error {
+	inputFile = filepath.Clean(inputFile)
+	absInput, err := filepath.Abs(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path %s: %w", inputFile, err)
+	}
+
+	if !isSupportedAudio(absInput) {
+		return fmt.Errorf("unsupported file format (only .m4a is allowed): %s", absInput)
+	}
+
+	// Extract just the base filename without extension
+	baseName := filepath.Base(strings.TrimSuffix(absInput, filepath.Ext(absInput)))
+	outputRoot, err := filepath.Abs(filepath.Clean(config.OutPutDir))
+	if err != nil {
+		return fmt.Errorf("failed to resolve output directory %s: %w", config.OutPutDir, err)
+	}
+
+	outputDir := filepath.Join(outputRoot, baseName)
+	if err = os.MkdirAll(outputDir, os.ModePerm); err != nil {
+		return fmt.Errorf("error creating output directory %s: %w", outputDir, err)
 	}
 
 	// Update the outputPattern to save chunks in the created folder
 	outputPattern := filepath.Join(outputDir, "chunk_%03d.m4a")
 
-	fmt.Println("Splitting the audio file into chunks...")
-	err = whisper.SplitAudioFile(inputFile, outputPattern)
-	if err != nil {
-		log.Printf("Error splitting file: %v\n", err)
-		return
+	fmt.Printf("Splitting the audio file into chunks for %s...\n", absInput)
+	if err = whisper.SplitAudioFile(absInput, outputPattern); err != nil {
+		return fmt.Errorf("error splitting file %s: %w", absInput, err)
 	}
 
-	ctx := context.Background()
-	client := openai.NewClient()
 	allSegments := makeAllParallel(
 		ctx,
 		outputPattern,
@@ -86,12 +141,10 @@ func main() {
 	// Serialize all segments into a single JSON
 	data, err := json.MarshalIndent(allSegments, "", "  ")
 	if err != nil {
-		log.Printf("Error serializing JSON: %v\n", err)
-		return
+		return fmt.Errorf("error serializing JSON: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(outputDir, `transcription.json`), data, 0644); err != nil {
-		log.Printf("Error saving file transcription.json: %v\n", err)
-		return
+		return fmt.Errorf("error saving file transcription.json: %w", err)
 	}
 	fmt.Println("Combined JSON saved to file `transcription.json`")
 
@@ -101,10 +154,8 @@ func main() {
 		textResult.WriteString(seg.Text)
 		textResult.WriteString("\n")
 	}
-	err = os.WriteFile(filepath.Join(outputDir, "transcription.txt"), []byte(textResult.String()), 0644)
-	if err != nil {
-		log.Printf("Error saving file transcription.txt: %v\n", err)
-		return
+	if err = os.WriteFile(filepath.Join(outputDir, "transcription.txt"), []byte(textResult.String()), 0644); err != nil {
+		return fmt.Errorf("error saving file transcription.txt: %w", err)
 	}
 	fmt.Println("Overall text saved to file `transcription.txt`")
 
@@ -123,9 +174,10 @@ func main() {
 	outputFile := baseName + ".txt"
 	outputPath := filepath.Join(outputDir, outputFile)
 	if err := os.WriteFile(outputPath, []byte(result.String()), 0644); err != nil {
-		log.Printf("Ошибка при записи файла: %v\n", err)
-		return
+		return fmt.Errorf("error writing result file: %w", err)
 	}
+
+	return nil
 }
 
 func makeAllParallel(
@@ -214,6 +266,33 @@ func formatTimestamp(seconds float64) string {
 	minutes := int(duration.Minutes()) % 60
 	secs := int(duration.Seconds()) % 60
 	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, secs)
+}
+
+func collectAudioFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		if isSupportedAudio(entry.Name()) {
+			files = append(files, filepath.Join(dir, entry.Name()))
+		}
+	}
+
+	sort.Strings(files)
+	return files, nil
+}
+
+func isSupportedAudio(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	_, ok := supportedAudioExt[ext]
+	return ok
 }
 
 func loadConfig(configPath string) (*Config, error) {
