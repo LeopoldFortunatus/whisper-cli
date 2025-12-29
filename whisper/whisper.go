@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/packages/param"
+	"github.com/rs/zerolog/log"
 )
 
 // GetDuration Get the duration of the file using ffprobe
@@ -38,7 +38,7 @@ func SplitAudioFile(
 	inputPath string,
 	outputPattern string,
 ) error {
-	log.Printf("Splitting file: %s", inputPath)
+	log.Info().Str("file", inputPath).Msg("splitting file")
 	// Create the output directory if it doesn't exist
 	outputDir := filepath.Dir(outputPattern)
 	err := os.MkdirAll(outputDir, os.ModePerm)
@@ -69,7 +69,7 @@ func TranscribeAudioSRT(
 	offset float64,
 	language string,
 ) ([]Segment, error) {
-	log.Printf("Transcribing file: %s", filePath)
+	log.Info().Str("file", filePath).Msg("transcribing file (whisper-1)")
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening file: %v", err)
@@ -77,7 +77,7 @@ func TranscribeAudioSRT(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			log.Printf("error closing file: %v", err)
+			log.Warn().Err(err).Msg("error closing file")
 		}
 	}(f)
 
@@ -113,7 +113,7 @@ func TranscribeAudioText(
 	filePath string,
 	language string,
 ) (string, error) {
-	log.Printf("Transcribing file: %s", filePath)
+	log.Info().Str("file", filePath).Msg("transcribing file (gpt-4o-transcribe)")
 	f, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("error opening file: %v", err)
@@ -121,7 +121,7 @@ func TranscribeAudioText(
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			log.Printf("error closing file: %v", err)
+			log.Warn().Err(err).Msg("error closing file")
 		}
 	}(f)
 

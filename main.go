@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"log/syslog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/arykalin/whisper-cli/whisper"
 	"github.com/openai/openai-go"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
@@ -29,11 +33,46 @@ var supportedAudioExt = map[string]struct{}{
 	".m4a": {},
 }
 
+func initLogger() {
+	writer, err := syslog.New(syslog.LOG_INFO|syslog.LOG_USER, "whisper-cli")
+	if err != nil {
+		log.Logger = log.Output(zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			TimeFormat: time.RFC3339,
+		})
+		log.Warn().Err(err).Msg("syslog unavailable, using stderr")
+		return
+	}
+
+	log.Logger = zerolog.New(zerolog.SyslogLevelWriter(writer)).With().Timestamp().Logger()
+}
+
+func preflight() error {
+	if key := strings.TrimSpace(os.Getenv("OPENAI_API_KEY")); key == "" {
+		return errors.New("environment variable OPENAI_API_KEY is not set")
+	}
+
+	if err := ensureBinaries("ffmpeg", "ffprobe"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ensureBinaries(names ...string) error {
+	for _, name := range names {
+		if _, err := exec.LookPath(name); err != nil {
+			return fmt.Errorf("%s not found in PATH; please install ffmpeg/ffprobe", name)
+		}
+	}
+	return nil
+}
+
 type Config struct {
 	InputFile string `yaml:"input_file"`
 	Language  string `yaml:"language,omitempty"`   // Optional language field
-	OutPutDir string `yaml:"output_dir,omitempty"` // Optional output directory
-	UserGPT4  bool   `yaml:"usergpt4,omitempty"`   // Optional format field
+	OutputDir string `yaml:"output_dir,omitempty"` // Optional output directory
+	UseGPT4   bool   `yaml:"usergpt4,omitempty"`   // Optional format field
 }
 
 func main() {
@@ -41,57 +80,68 @@ func main() {
 	inputFlag := flag.String("input", "", "Path to the input audio file")
 	flag.Parse()
 
-	config, err := loadConfig(*configPath)
-	if err != nil {
-		log.Printf("Ошибка загрузки конфигурации: %v\n", err)
-		return
+	initLogger()
+
+	if err := run(context.Background(), *configPath, *inputFlag); err != nil {
+		log.Fatal().Err(err).Msg("execution failed")
 	}
-	config.UserGPT4 = true
+}
+
+func run(ctx context.Context, configPath, inputOverride string) error {
+	if err := preflight(); err != nil {
+		return err
+	}
+
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
 
 	// If the input file is not provided in the config, check the command line flag
 	inputPath := strings.TrimSpace(config.InputFile)
-	if *inputFlag != "" {
-		inputPath = *inputFlag
+	if inputOverride != "" {
+		inputPath = inputOverride
 	}
 
 	if inputPath == "" {
-		log.Fatal().Msg("No input file specified. Use -input flag or set input_file in config.yaml.")
+		return errors.New("no input file specified; use -input flag or set input_file in config.yaml")
 	}
 
 	inputPath = filepath.Clean(inputPath)
 	inputPath, err = filepath.Abs(inputPath)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to resolve input path")
+		return fmt.Errorf("failed to resolve input path: %w", err)
 	}
 
 	info, err := os.Stat(inputPath)
 	if err != nil {
-		log.Fatal().Err(err).Str("path", inputPath).Msg("Cannot stat input path")
+		return fmt.Errorf("cannot stat input path %s: %w", inputPath, err)
 	}
 
-	ctx := context.Background()
 	client := openai.NewClient()
 
 	if info.IsDir() {
 		files, err := collectAudioFiles(inputPath)
 		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to scan input directory")
+			return fmt.Errorf("failed to scan input directory: %w", err)
 		}
 		if len(files) == 0 {
-			log.Fatal().Msg("Input directory does not contain .m4a audio files")
+			return errors.New("input directory does not contain .m4a audio files")
 		}
 
+		var firstErr error
 		for _, file := range files {
 			if err := processFile(ctx, client, config, file); err != nil {
-				log.Error().Err(err).Str("file", file).Msg("Failed to transcribe file")
+				log.Error().Err(err).Str("file", file).Msg("failed to transcribe file")
+				if firstErr == nil {
+					firstErr = err
+				}
 			}
 		}
-		return
+		return firstErr
 	}
 
-	if err := processFile(ctx, client, config, inputPath); err != nil {
-		log.Fatal().Err(err).Msg("Failed to transcribe input file")
-	}
+	return processFile(ctx, client, config, inputPath)
 }
 
 func processFile(
@@ -112,9 +162,9 @@ func processFile(
 
 	// Extract just the base filename without extension
 	baseName := filepath.Base(strings.TrimSuffix(absInput, filepath.Ext(absInput)))
-	outputRoot, err := filepath.Abs(filepath.Clean(config.OutPutDir))
+	outputRoot, err := filepath.Abs(filepath.Clean(config.OutputDir))
 	if err != nil {
-		return fmt.Errorf("failed to resolve output directory %s: %w", config.OutPutDir, err)
+		return fmt.Errorf("failed to resolve output directory %s: %w", config.OutputDir, err)
 	}
 
 	outputDir := filepath.Join(outputRoot, baseName)
@@ -125,7 +175,7 @@ func processFile(
 	// Update the outputPattern to save chunks in the created folder
 	outputPattern := filepath.Join(outputDir, "chunk_%03d.m4a")
 
-	fmt.Printf("Splitting the audio file into chunks for %s...\n", absInput)
+	log.Info().Str("file", absInput).Msg("splitting audio into chunks")
 	if err = whisper.SplitAudioFile(absInput, outputPattern); err != nil {
 		return fmt.Errorf("error splitting file %s: %w", absInput, err)
 	}
@@ -135,7 +185,7 @@ func processFile(
 		outputPattern,
 		config.Language,
 		client,
-		config.UserGPT4,
+		config.UseGPT4,
 	)
 
 	// Serialize all segments into a single JSON
@@ -146,7 +196,7 @@ func processFile(
 	if err := os.WriteFile(filepath.Join(outputDir, `transcription.json`), data, 0644); err != nil {
 		return fmt.Errorf("error saving file transcription.json: %w", err)
 	}
-	fmt.Println("Combined JSON saved to file `transcription.json`")
+	log.Info().Str("path", filepath.Join(outputDir, "transcription.json")).Msg("combined JSON saved")
 
 	// Additionally, collect the overall text
 	var textResult strings.Builder
@@ -157,7 +207,7 @@ func processFile(
 	if err = os.WriteFile(filepath.Join(outputDir, "transcription.txt"), []byte(textResult.String()), 0644); err != nil {
 		return fmt.Errorf("error saving file transcription.txt: %w", err)
 	}
-	fmt.Println("Overall text saved to file `transcription.txt`")
+	log.Info().Str("path", filepath.Join(outputDir, "transcription.txt")).Msg("overall text saved")
 
 	// Create a text file with timestamps
 	var result strings.Builder
@@ -310,8 +360,8 @@ func loadConfig(configPath string) (*Config, error) {
 		config.Language = "ru"
 	}
 
-	if config.OutPutDir == "" {
-		config.OutPutDir = "output"
+	if config.OutputDir == "" {
+		config.OutputDir = "output"
 	}
 
 	return &config, nil
@@ -322,7 +372,7 @@ func makeSegments(
 	chunk chunkInfo,
 	client openai.Client,
 	language string,
-	useGpt4 bool,
+	useGPT4 bool,
 ) ([]whisper.Segment, error) {
 	// Check if intermediate file exists
 	intermediateFile := strings.TrimSuffix(chunk.path, filepath.Ext(chunk.path)) + "_transcription.json"
@@ -330,7 +380,7 @@ func makeSegments(
 		// File exists, try to unmarshal
 		var segments []whisper.Segment
 		if err := json.Unmarshal(data, &segments); err == nil {
-			log.Printf("Loading existing transcription for %s\n", chunk.path)
+			log.Info().Str("file", chunk.path).Msg("loading existing transcription")
 			return segments, nil
 		}
 		// If unmarshalling fails, continue with transcription
@@ -341,7 +391,7 @@ func makeSegments(
 		segments []whisper.Segment
 		err      error
 	)
-	if useGpt4 {
+	if useGPT4 {
 		result, err := whisper.TranscribeAudioText(ctx, client, chunk.path, language)
 		if err != nil {
 			return nil, fmt.Errorf("error transcribing file: %v", err)
@@ -361,10 +411,10 @@ func makeSegments(
 	// Save intermediate result
 	data, err := json.MarshalIndent(segments, "", "  ")
 	if err != nil {
-		log.Printf("Warning: Failed to serialize intermediate result: %v\n", err)
+		log.Warn().Err(err).Msg("failed to serialize intermediate result")
 	} else {
 		if err := os.WriteFile(intermediateFile, data, 0644); err != nil {
-			log.Printf("Warning: Failed to save intermediate result: %v\n", err)
+			log.Warn().Err(err).Str("file", intermediateFile).Msg("failed to save intermediate result")
 		}
 	}
 
