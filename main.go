@@ -34,17 +34,21 @@ var supportedAudioExt = map[string]struct{}{
 }
 
 func initLogger() {
+	consoleWriter := zerolog.ConsoleWriter{
+		Out:        os.Stderr,
+		TimeFormat: time.RFC3339,
+	}
+
 	writer, err := syslog.New(syslog.LOG_INFO|syslog.LOG_USER, "whisper-cli")
 	if err != nil {
-		log.Logger = log.Output(zerolog.ConsoleWriter{
-			Out:        os.Stderr,
-			TimeFormat: time.RFC3339,
-		})
+		log.Logger = zerolog.New(consoleWriter).With().Timestamp().Logger()
 		log.Warn().Err(err).Msg("syslog unavailable, using stderr")
 		return
 	}
 
-	log.Logger = zerolog.New(zerolog.SyslogLevelWriter(writer)).With().Timestamp().Logger()
+	log.Logger = zerolog.New(
+		zerolog.MultiLevelWriter(consoleWriter, zerolog.SyslogLevelWriter(writer)),
+	).With().Timestamp().Logger()
 }
 
 func preflight() error {
