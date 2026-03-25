@@ -1,10 +1,10 @@
-# Exec Plans
+# Планы выполнения
 
-Owner: Platform Team
-Last Verified: 2026-03-25
+Владелец: Platform Team
+Проверено: 2026-03-25
 
 `docs/exec-plans/active/` хранит текущие длинные задачи.
 
-`docs/exec-plans/completed/` хранит завершённые планы как журнал решений и выполненных slices.
+`docs/exec-plans/completed/` хранит завершённые планы как журнал решений и выполненных срезов.
 
-`docs/exec-plans/template.md` задаёт минимальную self-contained форму плана.
+`docs/exec-plans/template.md` задаёт минимальную самодостаточную форму плана.

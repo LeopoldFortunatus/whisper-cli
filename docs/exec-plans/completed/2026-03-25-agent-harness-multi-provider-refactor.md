@@ -1,54 +1,54 @@
-# Agent Harness And Multi-Provider Refactor
+# Рефакторинг agent harness и multi-provider поддержки
 
-Owner: Platform Team
-Last Verified: 2026-03-25
+Владелец: Platform Team
+Проверено: 2026-03-25
 Status: Completed
 
-## Goal
+## Цель
 
 Сделать `whisper-cli` агент-легибельным и подготовить кодовую базу к multi-provider speech-to-text развитию.
 
-## Context
+## Контекст
 
-- Исходное состояние: монолитный `main.go`, отсутствовали docs map, review workflow, Makefile quality loop, локальный `make ci` и тестовый baseline.
-- Целевой результат: thin bootstrap, internal package boundaries, нормализованный transcript model, provider adapters, проверяемый harness слой.
+- Исходное состояние: монолитный `main.go`, отсутствовали карта документации, workflow ревью, `Makefile quality loop`, локальный `make ci` и тестовый baseline.
+- Целевой результат: тонкий `bootstrap`, границы `internal packages`, нормализованная `transcript model`, `provider adapters`, проверяемый `harness` слой.
 
-## Risks
+## Риски
 
-1. При разрезании монолита можно было потерять совместимость CLI и legacy YAML-конфига.
-2. Provider contracts для OpenAI/Groq могли разойтись с нормализованным output model.
-3. Слишком тонкий docs layer дал бы формальный harness без operational clarity.
+1. При разрезании монолита можно было потерять совместимость CLI и `legacy YAML`-конфига.
+2. `Provider contracts` для OpenAI/Groq могли разойтись с нормализованной `output model`.
+3. Слишком тонкий слой документации дал бы формальный `harness` без `operational clarity`.
 
-## Plan
+## План
 
-- введены `AGENTS.md`, docs map, `Makefile`, локальный `make ci` и docs-check
-- монолитный `main.go` разрезан на internal packages
-- добавлены OpenAI/Groq adapters и capability gating
-- добавлены unit tests на config, audio discovery, outputs, orchestration и adapter retry path
-- закреплён roadmap для subtitle, diarization и OpenRouter follow-up
+- введены `AGENTS.md`, карта документации, `Makefile`, локальный `make ci` и `docs-check`
+- монолитный `main.go` разрезан на `internal packages`
+- добавлены `OpenAI/Groq adapters` и `capability gating`
+- добавлены `unit tests` на `config`, `audio discovery`, `outputs`, оркестрацию и `adapter retry path`
+- закреплена дорожная карта для `subtitle`, `diarization` и `OpenRouter follow-up`
 
-## Validation
+## Проверка
 
 - `go test ./...`
 - `make ci`
 
-## Decision Log
+## Журнал решений
 
-- 2026-03-25: использовать `flags > env > YAML > defaults`, сохранив YAML как legacy compatibility layer
-- 2026-03-25: держать OpenRouter как blocked adapter slot, а не как half-working implementation
-- 2026-03-25: нормализовать outputs на уровне internal domain model, а provider raw хранить отдельно
+- 2026-03-25: использовать `flags > env > YAML > defaults`, сохранив YAML как `legacy compatibility layer`
+- 2026-03-25: держать OpenRouter как `blocked adapter slot`, а не как `half-working implementation`
+- 2026-03-25: нормализовать `outputs` на уровне `internal domain model`, а `provider raw` хранить отдельно
 
-## Discoveries
+## Находки
 
-- Основной operational gap был не только в коде, но и в repo legibility: roadmap status ambiguity, отсутствие review protocol, слабая docs mechanization.
-- OpenAI diarization потребовал отдельный request shape через `diarized_json`.
+- Основной `operational gap` был не только в коде, но и в читаемости репозитория: неоднозначные `roadmap statuses`, отсутствие `review protocol`, слабая механизация документации.
+- OpenAI `diarization` потребовал отдельный `request shape` через `diarized_json`.
 
-## Follow-Ups
+## Следующие шаги
 
-- OpenRouter остаётся blocked до подтверждённого official transcription contract.
-- При росте числа task slices можно ужесточить `docs-check` дальше: stale active plans, richer metadata checks и stricter exec-plan linting.
+- OpenRouter остаётся заблокированным до подтверждённого `official transcription contract`.
+- При росте числа `task slices` можно ужесточить `docs-check` дальше: `stale active plans`, `richer metadata checks` и более строгий `exec-plan linting`.
 
-## Retrospective
+## Итоги
 
-- Репозиторий стал usable как system of record, но первая версия harness была слишком тонкой по части roadmap statuses и review protocol.
-- Следующий meaningful improvement должен идти в сторону stronger docs automation, а не ещё одного большого AGENTS файла.
+- Репозиторий стал пригоден как `system of record`, но первая версия `harness` была слишком тонкой по части `roadmap statuses` и `review protocol`.
+- Следующий существенный шаг должен идти в сторону более сильной автоматизации документации, а не ещё одного большого файла `AGENTS`.

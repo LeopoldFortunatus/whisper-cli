@@ -1,28 +1,28 @@
-# Docs Index
+# Индекс документации
 
-Owner: Platform Team
-Last Verified: 2026-03-25
+Владелец: Platform Team
+Проверено: 2026-03-25
 
-## Knowledge Map
+## Карта знаний
 
-Это точка входа для людей и агентов. Новая договорённость должна появиться в одном source-of-truth документе ниже.
+Это точка входа для людей и агентов. Новая договорённость должна появиться в одном документе-источнике ниже.
 
-## Core Documents
+## Основные документы
 
-| Document | Scope |
+| Документ | Область |
 | --- | --- |
-| [`../README.md`](../README.md) | обзор CLI, запуск, env, examples |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | слои, границы и package ownership |
-| [`MAINTENANCE.md`](MAINTENANCE.md) | quality loop, live tests, DoD |
-| [`PROJECT_REVIEW_WORKFLOW.md`](PROJECT_REVIEW_WORKFLOW.md) | full-project review и pre-merge review protocol |
-| [`ROADMAP.md`](ROADMAP.md) | продуктовые и инженерные slices |
-| [`tech-debt-tracker.md`](tech-debt-tracker.md) | явный реестр долгов и blocked follow-ups |
-| [`exec-plans/README.md`](exec-plans/README.md) | навигация по execution plans |
+| [`../README.md`](../README.md) | обзор CLI, запуск, `env`, примеры |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | слои, границы и владение пакетами |
+| [`MAINTENANCE.md`](MAINTENANCE.md) | quality loop, `live tests`, DoD |
+| [`PROJECT_REVIEW_WORKFLOW.md`](PROJECT_REVIEW_WORKFLOW.md) | полное ревью проекта и протокол pre-merge review |
+| [`ROADMAP.md`](ROADMAP.md) | продуктовые и инженерные срезы |
+| [`tech-debt-tracker.md`](tech-debt-tracker.md) | явный реестр долгов и заблокированных follow-up задач |
+| [`exec-plans/README.md`](exec-plans/README.md) | навигация по планам выполнения |
 
-## Maintenance Rules
+## Правила сопровождения
 
 1. `AGENTS.md` остаётся картой, не энциклопедией.
-2. Для длинной задачи useful memory живёт в `docs/exec-plans/`.
-3. Review workflow должен быть стандартизован, а не придуман заново в каждом диалоге.
+2. Для длинной задачи полезный контекст живёт в `docs/exec-plans/`.
+3. Workflow ревью должен быть стандартизован, а не придуман заново в каждом диалоге.
 4. Документация и качество обновляются вместе с кодом.
-5. Минимальный merge gate для локальной работы: `make ci`.
+5. Минимальный локальный `merge gate`: `make ci`.

@@ -48,3 +48,4 @@ Last Verified: 2026-03-25
 6. Конфиг резолвится через `flags > env > YAML > defaults`.
 7. Runtime output и локальные config/env файлы не хранятся в git-tracked state.
 8. Новое правило должно быть проверяемым тестом или `make`-gate.
+9. По умолчанию пиши по-русски; English используй только для устойчивых technical terms, имён команд, API и code identifiers.

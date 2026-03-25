@@ -1,17 +1,17 @@
-# Maintenance
+# Эксплуатация
 
-Owner: Platform Team
-Last Verified: 2026-03-25
+Владелец: Platform Team
+Проверено: 2026-03-25
 
-## Local Build Contract
+## Локальный build contract
 
 - `make build` пишет бинарник в `./bin/whisper-cli`
 - `make install` копирует `./bin/whisper-cli` в `~/.local/bin/whisper-cli` и создаёт `~/.local/bin`, если каталога ещё нет
 - для непостоянной установки или проверки можно переопределить `INSTALL_DIR`, например `make install INSTALL_DIR=/tmp/whisper-cli-bin`
 
-## Local Quality Loop
+## Локальный quality loop
 
-Для этого проекта нет внешнего CI. Официальный quality gate сейчас только локальный `make ci`.
+Для этого проекта нет внешнего CI. Официальный `quality gate` сейчас только локальный `make ci`.
 
 - `make fmt`
 - `make fmt-check`
@@ -21,9 +21,9 @@ Last Verified: 2026-03-25
 - `make docs-check`
 - `make ci`
 
-## Live Smoke Tests
+## Live smoke tests
 
-Opt-in only. В `make ci` не входят.
+Запускаются только по `opt-in`. В `make ci` не входят.
 
 - `make test-live-openai LIVE_AUDIO_FILE=/abs/path/audio.m4a`
 - `make test-live-openai-diarize LIVE_AUDIO_FILE=/abs/path/audio.m4a`
@@ -35,12 +35,12 @@ Opt-in only. В `make ci` не входят.
 - для Groq: `GROQ_API_KEY`
 - `LIVE_AUDIO_FILE` должен указывать на локальный аудиофайл
 
-Ключи должны быть экспортированы в environment дочернего процесса. `echo $OPENAI_API_KEY` может печатать shell-переменную, которая не видна `whisper-cli`, если не выполнен `export`.
+Ключи должны быть экспортированы в окружение дочернего процесса. `echo $OPENAI_API_KEY` может печатать shell-переменную, которая не видна `whisper-cli`, если не выполнен `export`.
 
-## Definition Of Done
+## Критерии готовности
 
-1. Код и docs согласованы.
+1. Код и документация согласованы.
 2. `make ci` green.
-3. Для новых provider-фич есть unit coverage.
-4. Если менялся provider contract, live smoke tests либо запущены, либо явно not run с причиной.
-5. Если задача была длинной или многосрезовой, есть self-contained exec-plan.
+3. Для новых provider-фич есть `unit coverage`.
+4. Если менялся `provider contract`, `live smoke tests` либо запущены, либо явно отмечены как `not run` с причиной.
+5. Если задача была длинной или многосрезовой, есть self-contained `exec-plan`.

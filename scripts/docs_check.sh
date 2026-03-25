@@ -26,11 +26,11 @@ for file in "${required_files[@]}"; do
 done
 
 grep -q '^# AGENTS Map' AGENTS.md
-grep -q '^# Docs Index' docs/index.md
-grep -q '^# Architecture' docs/ARCHITECTURE.md
-grep -q '^# Maintenance' docs/MAINTENANCE.md
-grep -q '^# Project Review Workflow' docs/PROJECT_REVIEW_WORKFLOW.md
-grep -q '^# Roadmap' docs/ROADMAP.md
+grep -q '^# Индекс документации' docs/index.md
+grep -q '^# Архитектура' docs/ARCHITECTURE.md
+grep -q '^# Эксплуатация' docs/MAINTENANCE.md
+grep -q '^# Регламент ревью проекта' docs/PROJECT_REVIEW_WORKFLOW.md
+grep -q '^# Дорожная карта' docs/ROADMAP.md
 grep -q '^## Done$' docs/ROADMAP.md
 grep -q '^## In Progress$' docs/ROADMAP.md
 grep -q '^## Planned$' docs/ROADMAP.md
@@ -40,13 +40,13 @@ grep -q 'make ci' README.md
 
 for file in $(find docs/exec-plans/active -maxdepth 1 -type f ! -name README.md | sort); do
   grep -q '^Status:' "$file"
-  grep -q '^## Goal$' "$file"
-  grep -q '^## Validation$' "$file"
+  grep -q '^## Цель$' "$file"
+  grep -q '^## Проверка$' "$file"
 done
 
 for file in $(find docs/exec-plans/completed -maxdepth 1 -type f ! -name README.md | sort); do
   grep -q '^Status: Completed$' "$file"
-  grep -q '^## Goal$' "$file"
-  grep -q '^## Validation$' "$file"
-  grep -q '^## Decision Log$' "$file"
+  grep -q '^## Цель$' "$file"
+  grep -q '^## Проверка$' "$file"
+  grep -q '^## Журнал решений$' "$file"
 done
