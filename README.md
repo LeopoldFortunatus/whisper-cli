@@ -122,6 +122,7 @@ OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/a
 
 - `make fmt`
 - `make fmt-check`
+- `make lint`
 - `make test`
 - `make vet`
 - `make docs-check`

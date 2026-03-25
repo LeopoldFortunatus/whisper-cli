@@ -7,6 +7,7 @@ Last Verified: 2026-03-25
 
 - `make fmt`
 - `make fmt-check`
+- `make lint`
 - `make test`
 - `make vet`
 - `make docs-check`

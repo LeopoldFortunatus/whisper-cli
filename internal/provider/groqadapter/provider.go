@@ -50,15 +50,6 @@ func New(apiKey string, fs fsx.FS, logger zerolog.Logger) *Provider {
 	}
 }
 
-func newWithRequester(apiKey string, fs fsx.FS, logger zerolog.Logger, requester requester) *Provider {
-	return &Provider{
-		apiKey:    apiKey,
-		fs:        fs,
-		requester: requester,
-		logger:    logger.With().Str("provider", string(domain.ProviderGroq)).Logger(),
-	}
-}
-
 func (p *Provider) Name() domain.Provider {
 	return domain.ProviderGroq
 }
@@ -86,12 +77,16 @@ func (p *Provider) Transcribe(ctx context.Context, req provider.Request) (provid
 		text string
 	)
 
-	err := provider.Retry(ctx, p.logger, string(p.Name()), func() error {
+	err := provider.Retry(ctx, p.logger, string(p.Name()), func() (err error) {
 		file, err := p.fs.Open(req.FilePath)
 		if err != nil {
 			return fmt.Errorf("open audio file: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil && err == nil {
+				err = fmt.Errorf("close audio file: %w", closeErr)
+			}
+		}()
 
 		params := openai.AudioTranscriptionNewParams{
 			File:           file,

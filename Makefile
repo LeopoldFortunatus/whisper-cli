@@ -1,14 +1,18 @@
 GO ?= go
 GOFLAGS ?= -mod=vendor
 GOFILES := $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+GOLANGCI_LINT ?= golangci-lint
 
-.PHONY: fmt fmt-check test vet docs-check ci test-live-openai test-live-openai-diarize test-live-groq
+.PHONY: fmt fmt-check lint test vet docs-check ci test-live-openai test-live-openai-diarize test-live-groq
 
 fmt:
 	gofmt -w $(GOFILES)
 
 fmt-check:
 	@test -z "$$(gofmt -l $(GOFILES))" || (echo "Run make fmt"; gofmt -l $(GOFILES); exit 1)
+
+lint:
+	$(GOLANGCI_LINT) run --config .golangci.yml --modules-download-mode=vendor ./...
 
 test:
 	GOFLAGS=$(GOFLAGS) $(GO) test ./...
@@ -19,7 +23,7 @@ vet:
 docs-check:
 	bash scripts/docs_check.sh
 
-ci: fmt-check vet test docs-check
+ci: fmt-check lint vet test docs-check
 
 test-live-openai:
 	@test -n "$(LIVE_AUDIO_FILE)" || (echo "LIVE_AUDIO_FILE is required"; exit 1)

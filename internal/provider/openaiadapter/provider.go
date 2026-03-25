@@ -87,12 +87,16 @@ func (p *Provider) Transcribe(ctx context.Context, req provider.Request) (provid
 		text string
 	)
 
-	err := provider.Retry(ctx, p.logger, string(p.Name()), func() error {
+	err := provider.Retry(ctx, p.logger, string(p.Name()), func() (err error) {
 		file, err := p.fs.Open(req.FilePath)
 		if err != nil {
 			return fmt.Errorf("open audio file: %w", err)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil && err == nil {
+				err = fmt.Errorf("close audio file: %w", closeErr)
+			}
+		}()
 
 		params := openai.AudioTranscriptionNewParams{
 			File:     file,
