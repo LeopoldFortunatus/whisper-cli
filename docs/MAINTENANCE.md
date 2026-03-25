@@ -3,7 +3,15 @@
 Owner: Platform Team
 Last Verified: 2026-03-25
 
+## Local Build Contract
+
+- `make build` пишет бинарник в `./bin/whisper-cli`
+- `make install` копирует `./bin/whisper-cli` в `~/.local/bin/whisper-cli` и создаёт `~/.local/bin`, если каталога ещё нет
+- для непостоянной установки или проверки можно переопределить `INSTALL_DIR`, например `make install INSTALL_DIR=/tmp/whisper-cli-bin`
+
 ## Local Quality Loop
+
+Для этого проекта нет внешнего CI. Официальный quality gate сейчас только локальный `make ci`.
 
 - `make fmt`
 - `make fmt-check`

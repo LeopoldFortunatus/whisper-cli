@@ -26,6 +26,22 @@ Go CLI для локальной транскрипции аудиофайлов
 - `OPENAI_API_KEY` для `provider=openai`
 - `GROQ_API_KEY` для `provider=groq`
 
+## Build And Install
+
+```bash
+make build
+./bin/whisper-cli -h
+```
+
+```bash
+make install
+~/.local/bin/whisper-cli -h
+```
+
+`make build` пишет бинарник в `./bin/whisper-cli`.
+`make install` создаёт `~/.local/bin` при необходимости и копирует туда бинарник.
+Для проверки без записи в домашний каталог можно переопределить `INSTALL_DIR`, например `make install INSTALL_DIR=/tmp/whisper-cli-bin`.
+
 ## Quick Start
 
 ```bash
@@ -119,6 +135,8 @@ OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/a
 - `raw.json` при `outputs=raw`
 
 ## Quality Loop
+
+Внешнего CI для этого проекта нет. Единственный supported quality gate сейчас локальный `make ci`.
 
 - `make fmt`
 - `make fmt-check`

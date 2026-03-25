@@ -10,7 +10,7 @@ Status: Completed
 
 ## Context
 
-- Исходное состояние: монолитный `main.go`, отсутствовали docs map, review workflow, Makefile quality loop, CI и тестовый baseline.
+- Исходное состояние: монолитный `main.go`, отсутствовали docs map, review workflow, Makefile quality loop, локальный `make ci` и тестовый baseline.
 - Целевой результат: thin bootstrap, internal package boundaries, нормализованный transcript model, provider adapters, проверяемый harness слой.
 
 ## Risks
@@ -21,7 +21,7 @@ Status: Completed
 
 ## Plan
 
-- введены `AGENTS.md`, docs map, `Makefile`, CI и docs-check
+- введены `AGENTS.md`, docs map, `Makefile`, локальный `make ci` и docs-check
 - монолитный `main.go` разрезан на internal packages
 - добавлены OpenAI/Groq adapters и capability gating
 - добавлены unit tests на config, audio discovery, outputs, orchestration и adapter retry path

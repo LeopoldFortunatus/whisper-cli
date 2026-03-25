@@ -22,7 +22,7 @@ Last Verified: 2026-03-25
 
 1. README vs reality.
 2. AGENTS/docs/source-of-truth consistency.
-3. Quality loop and CI reproducibility.
+3. Local quality loop reproducibility через `make ci`.
 4. Architecture boundary violations.
 5. Dead code and stale docs.
 6. Provider contract drift and missing tests.

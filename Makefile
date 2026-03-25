@@ -1,9 +1,22 @@
 GO ?= go
 GOFLAGS ?= -mod=vendor
+BIN_NAME ?= whisper-cli
+BUILD_DIR ?= bin
+BUILD_PATH ?= $(BUILD_DIR)/$(BIN_NAME)
+INSTALL_DIR ?= $(HOME)/.local/bin
+INSTALL_PATH ?= $(INSTALL_DIR)/$(BIN_NAME)
 GOFILES := $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 GOLANGCI_LINT ?= golangci-lint
 
-.PHONY: fmt fmt-check lint test vet docs-check ci test-live-openai test-live-openai-diarize test-live-groq
+.PHONY: build install fmt fmt-check lint test vet docs-check ci test-live-openai test-live-openai-diarize test-live-groq
+
+build:
+	mkdir -p "$(BUILD_DIR)"
+	GOFLAGS=$(GOFLAGS) $(GO) build -o "$(BUILD_PATH)" .
+
+install: build
+	mkdir -p "$(INSTALL_DIR)"
+	cp "$(BUILD_PATH)" "$(INSTALL_PATH)"
 
 fmt:
 	gofmt -w $(GOFILES)

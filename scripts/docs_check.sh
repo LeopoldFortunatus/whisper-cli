@@ -16,7 +16,6 @@ required_files=(
   "docs/exec-plans/template.md"
   "docs/exec-plans/active/README.md"
   "docs/exec-plans/completed/README.md"
-  ".github/workflows/ci.yml"
 )
 
 for file in "${required_files[@]}"; do

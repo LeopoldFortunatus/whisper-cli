@@ -6,7 +6,7 @@ Last Verified: 2026-03-25
 ## Done
 
 ### RM-001 Agent Harness Bootstrap
-- закреплены `AGENTS.md`, docs map, `Makefile`, CI и exec-plan workflow
+- закреплены `AGENTS.md`, docs map, `Makefile`, локальный `make ci` и exec-plan workflow
 
 ### RM-002 Go Refactor And Test Coverage
 - `main.go` оставлен тонким bootstrap

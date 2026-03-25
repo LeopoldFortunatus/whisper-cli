@@ -23,7 +23,7 @@ Status: Completed
 ## Plan
 
 1. Добавить локальный `golangci-lint` v2 baseline config и явный `make lint`.
-2. Включить `lint` в `make ci`, чтобы GitHub Actions автоматически прогонял новый gate.
+2. Включить `lint` в `make ci`, чтобы локальный quality gate автоматически прогонял новый шаг.
 3. Исправить текущие baseline issues без `nolint`, если они отражают реальный кодовый дефект.
 4. Обновить tech-debt tracker и завершить exec-plan.
 

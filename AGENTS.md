@@ -20,6 +20,7 @@ Last Verified: 2026-03-25
 - не смешивай refactor, provider changes и docs drift без причины
 4. Validate:
 - `make ci`
+- внешнего CI нет; quality gate сейчас только локальный `make ci`
 - для provider-рисков при необходимости запускай opt-in live smoke tests
 5. Deliver:
 - короткий changelog
