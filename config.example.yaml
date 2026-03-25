@@ -1,0 +1,9 @@
+provider: openai
+model: whisper-1
+input: /absolute/path/to/audio-or-directory
+output_dir: /absolute/path/to/output
+language: ru
+outputs: timestamps
+chunk_seconds: 600
+concurrency: 4
+prompt: ""
