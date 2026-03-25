@@ -36,7 +36,9 @@ Last Verified: 2026-03-25
 
 ## Planned
 
-- none
+### RM-009 Auto-Convert Common Audio And Video Formats To M4A
+- автоматически конвертировать распространённые аудио- и видеоформаты в `m4a` через `ffmpeg` перед транскрипцией
+- сохранить это как явный preprocessing step, а не как скрытую побочную магию внутри provider adapters
 
 ## Blocked
 
