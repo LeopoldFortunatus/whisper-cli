@@ -3,33 +3,42 @@
 Owner: Platform Team
 Last Verified: 2026-03-25
 
-## Active / Planned
+## Done
 
 ### RM-001 Agent Harness Bootstrap
-- закрепить `AGENTS.md`, docs map, `Makefile`, CI, exec-plan workflow
+- закреплены `AGENTS.md`, docs map, `Makefile`, CI и exec-plan workflow
 
 ### RM-002 Go Refactor And Test Coverage
-- держать `main.go` тонким
-- вынести config, audio, providers, outputs, orchestration
-- довести baseline unit coverage на критичных слоях
+- `main.go` оставлен тонким bootstrap
+- config, audio, providers, outputs и orchestration вынесены в отдельные пакеты
+- добавлен baseline unit coverage на критичных слоях
 
 ### RM-003 12-Factor Cleanup
-- env-first runtime
-- cleanup git/runtime boundaries
-- no repo-local operational state by default
+- основной runtime contract сделан env-first
+- локальные runtime outputs и config/env boundary вынесены из git-tracked workflow
 
 ### RM-004 OpenAI Capability Registry
-- formalize model capabilities
-- keep `gpt-4o-transcribe-diarize` path supported through normalized transcript model
+- formalized model capability gating
+- сохранён path для `gpt-4o-transcribe-diarize`
 
 ### RM-005 Groq Support
-- поддержка `whisper-large-v3` и `whisper-large-v3-turbo`
+- добавлена поддержка `whisper-large-v3` и `whisper-large-v3-turbo`
 
 ### RM-006 Subtitle Options
-- `timestamps`, `srt`, `vtt` только для capability-compatible models
+- `timestamps`, `srt`, `vtt` включаются только для capability-compatible models
 
 ### RM-007 Diarization
-- provider-native diarization path через OpenAI
+- добавлен provider-native diarization path через OpenAI
+
+## In Progress
+
+- none
+
+## Planned
+
+- none
+
+## Blocked
 
 ### RM-008 OpenRouter Follow-Up
 - blocked до подтверждённого official transcription contract

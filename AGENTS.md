@@ -11,6 +11,7 @@ Last Verified: 2026-03-25
 - `README.md`
 - `docs/index.md`
 - релевантный файл в `docs/exec-plans/`
+ - `docs/PROJECT_REVIEW_WORKFLOW.md` если задача про review
 2. Plan:
 - для длинной задачи создай или обнови exec-plan
 - зафиксируй риски и checks до кодовых правок
@@ -30,6 +31,7 @@ Last Verified: 2026-03-25
 - карта знаний: `docs/index.md`
 - архитектура: `docs/ARCHITECTURE.md`
 - эксплуатация и DoD: `docs/MAINTENANCE.md`
+- review workflow: `docs/PROJECT_REVIEW_WORKFLOW.md`
 - roadmap: `docs/ROADMAP.md`
 - техдолг: `docs/tech-debt-tracker.md`
 - планы исполнения: `docs/exec-plans/`

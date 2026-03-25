@@ -32,3 +32,4 @@ Opt-in only. В `make ci` не входят.
 2. `make ci` green.
 3. Для новых provider-фич есть unit coverage.
 4. Если менялся provider contract, live smoke tests либо запущены, либо явно not run с причиной.
+5. Если задача была длинной или многосрезовой, есть self-contained exec-plan.
