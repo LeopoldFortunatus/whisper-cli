@@ -10,5 +10,5 @@ Last Verified: 2026-03-25
 - Plan: при возврате к slice `RM-008` повторно проверить official docs/OpenAPI и либо реализовать adapter, либо явно оставить provider blocked.
 ## Closed
 
-- TD-002 настроить линтер
+### TD-002 настроить линтер
   - Resolved: добавлен локальный `golangci-lint` v2 baseline, `make lint` и включение lint в `make ci`
