@@ -58,11 +58,11 @@ make install
 ## Quick Start
 
 ```bash
-make test
+make build
 ```
 
 ```bash
-OPENAI_API_KEY=... go run . \
+OPENAI_API_KEY=... ./bin/whisper-cli \
   -input /path/to/audio.m4a \
   -output-dir /tmp/whisper-cli \
   -provider openai \
@@ -70,7 +70,7 @@ OPENAI_API_KEY=... go run . \
 ```
 
 ```bash
-GROQ_API_KEY=... go run . \
+GROQ_API_KEY=... ./bin/whisper-cli \
   -input /path/to/audio-dir \
   -output-dir /tmp/whisper-cli \
   -provider groq \
@@ -81,7 +81,7 @@ GROQ_API_KEY=... go run . \
 Для моделей без segment timestamps CLI автоматически отключает `timestamps` и оставляет обязательные `transcript.json`/`transcript.txt`. Если нужны только plain outputs без других optional artifacts, можно явно указать:
 
 ```bash
-OPENAI_API_KEY=... go run . \
+OPENAI_API_KEY=... ./bin/whisper-cli \
   -input /path/to/audio.m4a \
   -provider openai \
   -model gpt-4o-transcribe \
