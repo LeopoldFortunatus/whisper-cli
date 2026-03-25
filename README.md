@@ -26,6 +26,19 @@ Go CLI для локальной транскрипции аудиофайлов
 - `OPENAI_API_KEY` для `provider=openai`
 - `GROQ_API_KEY` для `provider=groq`
 
+Важно: переменная должна быть экспортирована в environment процесса. Команда `echo $OPENAI_API_KEY` сама по себе не доказывает это: shell-переменная видна `echo`, но дочерние процессы её не унаследуют без `export`.
+
+```bash
+export OPENAI_API_KEY=...
+./bin/whisper-cli -h
+```
+
+Одноразовый вариант без `export`:
+
+```bash
+OPENAI_API_KEY=... ./bin/whisper-cli -h
+```
+
 ## Build And Install
 
 ```bash
@@ -65,7 +78,7 @@ GROQ_API_KEY=... go run . \
   -outputs timestamps,raw
 ```
 
-Если нужен только plain transcript для моделей без timestamps:
+Для моделей без segment timestamps CLI автоматически отключает `timestamps` и оставляет обязательные `transcript.json`/`transcript.txt`. Если нужны только plain outputs без других optional artifacts, можно явно указать:
 
 ```bash
 OPENAI_API_KEY=... go run . \
@@ -88,7 +101,7 @@ OPENAI_API_KEY=... go run . \
 - `-concurrency`
 - `-prompt`
 
-`-outputs` управляет только optional artifacts. `transcript.json` и `transcript.txt` создаются всегда.
+`-outputs` управляет только optional artifacts. `transcript.json` и `transcript.txt` создаются всегда. Если модель не поддерживает segment timestamps, `timestamps` автоматически отключаются с warning.
 
 Поддерживаемые optional outputs:
 

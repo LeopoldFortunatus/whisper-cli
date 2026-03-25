@@ -77,7 +77,8 @@ func (a *Application) Run(ctx context.Context, args []string) error {
 	if err := client.Preflight(); err != nil {
 		return err
 	}
-	if err := validateConfigAgainstCapabilities(client, cfg); err != nil {
+	cfg, err = normalizeConfigAgainstCapabilities(client, cfg, a.Logger)
+	if err != nil {
 		return err
 	}
 
@@ -119,29 +120,33 @@ func (a *Application) Run(ctx context.Context, args []string) error {
 	return a.processFile(ctx, client, cfg, inputPath, outputRoot)
 }
 
-func validateConfigAgainstCapabilities(client provider.Client, cfg config.Config) error {
+func normalizeConfigAgainstCapabilities(client provider.Client, cfg config.Config, logger zerolog.Logger) (config.Config, error) {
 	caps, ok := client.Capabilities(cfg.Model)
 	if !ok {
-		return fmt.Errorf("model %s is not supported by provider %s", cfg.Model, cfg.Provider)
+		return config.Config{}, fmt.Errorf("model %s is not supported by provider %s", cfg.Model, cfg.Provider)
 	}
 
 	if cfg.Prompt != "" && !caps.SupportsPrompt {
-		return fmt.Errorf("model %s does not support prompt", cfg.Model)
+		return config.Config{}, fmt.Errorf("model %s does not support prompt", cfg.Model)
 	}
 	if cfg.Outputs.Enabled(domain.ArtifactTimestamps) && !caps.SupportsSegmentTimestamps {
-		return fmt.Errorf("model %s does not support timestamp artifacts", cfg.Model)
+		delete(cfg.Outputs, domain.ArtifactTimestamps)
+		logger.Warn().
+			Str("provider", string(cfg.Provider)).
+			Str("model", cfg.Model).
+			Msg("timestamps output is not supported by model; disabling timestamps artifact")
 	}
 	if cfg.Outputs.Enabled(domain.ArtifactSRT) && !caps.SupportsSRT {
-		return fmt.Errorf("model %s does not support srt artifacts", cfg.Model)
+		return config.Config{}, fmt.Errorf("model %s does not support srt artifacts", cfg.Model)
 	}
 	if cfg.Outputs.Enabled(domain.ArtifactVTT) && !caps.SupportsVTT {
-		return fmt.Errorf("model %s does not support vtt artifacts", cfg.Model)
+		return config.Config{}, fmt.Errorf("model %s does not support vtt artifacts", cfg.Model)
 	}
 	if cfg.Outputs.Enabled(domain.ArtifactDiarized) && !caps.SupportsDiarization {
-		return fmt.Errorf("model %s does not support diarization", cfg.Model)
+		return config.Config{}, fmt.Errorf("model %s does not support diarization", cfg.Model)
 	}
 
-	return nil
+	return cfg, nil
 }
 
 func (a *Application) processFile(

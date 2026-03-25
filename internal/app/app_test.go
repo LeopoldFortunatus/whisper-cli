@@ -167,7 +167,66 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 	}
 }
 
-func TestApplicationRunRejectsUnsupportedTimestampModel(t *testing.T) {
+func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
+	t.Parallel()
+
+	logger := zerolog.New(io.Discard)
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input.m4a")
+	if err := os.WriteFile(input, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+
+	app := &Application{
+		FS: fsx.OS{},
+		Audio: fakeAudioPipeline{
+			chunks: []audio.Chunk{
+				{Number: 0, Path: "chunk-0", Offset: 0},
+			},
+		},
+		Registry: provider.NewRegistry(fakeProvider{
+			name: domain.ProviderOpenAI,
+			capabilities: map[string]domain.Capabilities{
+				"gpt-4o-transcribe": {},
+			},
+			responses: map[string]provider.Response{
+				"chunk-0": {
+					Transcript: domain.Transcript{
+						Text: "plain transcript",
+					},
+				},
+			},
+		}),
+		Logger: logger,
+		Env:    config.OSEnv{},
+	}
+
+	outputRoot := filepath.Join(dir, "out")
+	err := app.Run(context.Background(), []string{
+		"-input", input,
+		"-output-dir", outputRoot,
+		"-provider", "openai",
+		"-model", "gpt-4o-transcribe",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	outDir := filepath.Join(outputRoot, "input")
+	if _, err := os.Stat(filepath.Join(outDir, "timestamps.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected timestamps.txt to be skipped, stat err = %v", err)
+	}
+
+	text, err := os.ReadFile(filepath.Join(outDir, "transcript.txt"))
+	if err != nil {
+		t.Fatalf("read transcript.txt: %v", err)
+	}
+	if strings.TrimSpace(string(text)) != "plain transcript" {
+		t.Fatalf("unexpected transcript.txt: %q", string(text))
+	}
+}
+
+func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 	t.Parallel()
 
 	logger := zerolog.New(io.Discard)
@@ -194,11 +253,12 @@ func TestApplicationRunRejectsUnsupportedTimestampModel(t *testing.T) {
 		"-input", input,
 		"-provider", "openai",
 		"-model", "gpt-4o-transcribe",
+		"-outputs", "srt",
 	})
 	if err == nil {
-		t.Fatalf("expected error for unsupported timestamp artifacts")
+		t.Fatalf("expected error for unsupported srt artifacts")
 	}
-	if !strings.Contains(err.Error(), "does not support timestamp artifacts") {
+	if !strings.Contains(err.Error(), "does not support srt artifacts") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

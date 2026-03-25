@@ -137,7 +137,7 @@ func TestProviderPreflightRequiresKey(t *testing.T) {
 	t.Parallel()
 
 	client := newWithRequester("", fsx.OS{}, zerolog.New(io.Discard), &fakeRequester{})
-	if err := client.Preflight(); err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY") {
+	if err := client.Preflight(); err == nil || !strings.Contains(err.Error(), "export OPENAI_API_KEY") {
 		t.Fatalf("expected preflight error for missing key")
 	}
 }

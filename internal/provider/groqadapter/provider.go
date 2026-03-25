@@ -56,7 +56,7 @@ func (p *Provider) Name() domain.Provider {
 
 func (p *Provider) Preflight() error {
 	if p.apiKey == "" {
-		return errors.New("GROQ_API_KEY is not set")
+		return errors.New("GROQ_API_KEY is not set in process environment; run `export GROQ_API_KEY=...` or prefix the command with `GROQ_API_KEY=...`")
 	}
 	return nil
 }

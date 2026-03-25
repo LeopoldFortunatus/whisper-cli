@@ -35,6 +35,8 @@ Opt-in only. В `make ci` не входят.
 - для Groq: `GROQ_API_KEY`
 - `LIVE_AUDIO_FILE` должен указывать на локальный аудиофайл
 
+Ключи должны быть экспортированы в environment дочернего процесса. `echo $OPENAI_API_KEY` может печатать shell-переменную, которая не видна `whisper-cli`, если не выполнен `export`.
+
 ## Definition Of Done
 
 1. Код и docs согласованы.

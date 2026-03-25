@@ -86,6 +86,18 @@ type Config struct {
 	Prompt       string
 }
 
+type HelpError struct {
+	Usage string
+}
+
+func (e *HelpError) Error() string {
+	return flag.ErrHelp.Error()
+}
+
+func (e *HelpError) Unwrap() error {
+	return flag.ErrHelp
+}
+
 type EnvSource interface {
 	LookupEnv(key string) (string, bool)
 }
@@ -132,7 +144,7 @@ func ParseFlags(args []string) (Flags, error) {
 
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return Flags{}, err
+			return Flags{}, &HelpError{Usage: stderr.String()}
 		}
 		return Flags{}, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
