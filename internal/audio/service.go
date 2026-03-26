@@ -19,9 +19,16 @@ type Chunk struct {
 	Duration float64
 }
 
+type PreparedInput struct {
+	OriginalPath    string
+	ChunkSourcePath string
+	Converted       bool
+}
+
 type Pipeline interface {
 	EnsureBinaries() error
-	CollectAudioFiles(dir string) ([]string, error)
+	CollectMediaFiles(dir string) ([]string, error)
+	PrepareInput(ctx context.Context, inputFile string, workDir string) (PreparedInput, error)
 	PrepareChunks(ctx context.Context, inputFile string, workDir string, chunkSeconds int) ([]Chunk, error)
 }
 
@@ -30,7 +37,7 @@ type Service struct {
 	Runner execx.Runner
 }
 
-var supportedAudioExt = map[string]struct{}{
+var supportedMediaExt = map[string]struct{}{
 	".flac": {},
 	".m4a":  {},
 	".mp3":  {},
@@ -51,7 +58,7 @@ func (s Service) EnsureBinaries() error {
 	return nil
 }
 
-func (s Service) CollectAudioFiles(dir string) ([]string, error) {
+func (s Service) CollectMediaFiles(dir string) ([]string, error) {
 	entries, err := s.FS.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -62,13 +69,36 @@ func (s Service) CollectAudioFiles(dir string) ([]string, error) {
 		if entry.IsDir() {
 			continue
 		}
-		if isSupportedAudio(entry.Name()) {
+		if isSupportedMedia(entry.Name()) {
 			files = append(files, filepath.Join(dir, entry.Name()))
 		}
 	}
 
 	sort.Strings(files)
 	return files, nil
+}
+
+func (s Service) PrepareInput(ctx context.Context, inputFile string, workDir string) (PreparedInput, error) {
+	if err := s.FS.MkdirAll(workDir, 0o755); err != nil {
+		return PreparedInput{}, fmt.Errorf("create work directory: %w", err)
+	}
+
+	prepared := PreparedInput{
+		OriginalPath:    inputFile,
+		ChunkSourcePath: inputFile,
+	}
+	if strings.EqualFold(filepath.Ext(inputFile), ".m4a") {
+		return prepared, nil
+	}
+
+	convertedPath := filepath.Join(workDir, "source.m4a")
+	if err := s.convertToM4A(ctx, inputFile, convertedPath); err != nil {
+		return PreparedInput{}, err
+	}
+
+	prepared.ChunkSourcePath = convertedPath
+	prepared.Converted = true
+	return prepared, nil
 }
 
 func (s Service) PrepareChunks(ctx context.Context, inputFile string, workDir string, chunkSeconds int) ([]Chunk, error) {
@@ -78,7 +108,7 @@ func (s Service) PrepareChunks(ctx context.Context, inputFile string, workDir st
 
 	outputPattern := filepath.Join(workDir, "chunk_%03d.m4a")
 	if err := s.FS.MkdirAll(workDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create output directory: %w", err)
+		return nil, fmt.Errorf("create work directory: %w", err)
 	}
 
 	if err := s.split(ctx, inputFile, outputPattern, chunkSeconds); err != nil {
@@ -88,15 +118,32 @@ func (s Service) PrepareChunks(ctx context.Context, inputFile string, workDir st
 	return s.collectChunks(ctx, outputPattern)
 }
 
-func isSupportedAudio(name string) bool {
-	_, ok := supportedAudioExt[strings.ToLower(filepath.Ext(name))]
+func isSupportedMedia(name string) bool {
+	_, ok := supportedMediaExt[strings.ToLower(filepath.Ext(name))]
 	return ok
+}
+
+func (s Service) convertToM4A(ctx context.Context, inputPath string, outputPath string) error {
+	_, stderr, err := s.Runner.Run(
+		ctx,
+		"ffmpeg",
+		"-y",
+		"-i", inputPath,
+		"-vn",
+		"-c:a", "aac",
+		outputPath,
+	)
+	if err != nil {
+		return fmt.Errorf("convert input to m4a: %w: %s", err, strings.TrimSpace(string(stderr)))
+	}
+	return nil
 }
 
 func (s Service) split(ctx context.Context, inputPath string, outputPattern string, chunkSeconds int) error {
 	_, stderr, err := s.Runner.Run(
 		ctx,
 		"ffmpeg",
+		"-y",
 		"-i", inputPath,
 		"-f", "segment",
 		"-segment_time", strconv.Itoa(chunkSeconds),

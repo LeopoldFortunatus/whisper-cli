@@ -30,15 +30,16 @@
 ### RM-007 Diarization
 - добавлен `provider-native diarization path` через OpenAI
 
+### RM-009 Auto-Convert Common Audio And Video Formats To M4A
+- поддерживаемые non-`m4a` аудио- и видеоформаты автоматически нормализуются в `m4a` через явный `preprocessing step`
+- промежуточные `source/chunk` артефакты вынесены в `<output>/<base>/_work/`, а `provider adapters` остались без скрытой orchestration-логики
+
 ## In Progress
 
 - нет
 
 ## Planned
-
-### RM-009 Auto-Convert Common Audio And Video Formats To M4A
-- автоматически конвертировать распространённые аудио- и видеоформаты в `m4a` через `ffmpeg` перед транскрипцией
-- сохранить это как явный `preprocessing step`, а не как скрытую побочную магию внутри `provider adapters`
+- нет
 
 ## Blocked
 

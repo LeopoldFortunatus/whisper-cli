@@ -11,11 +11,13 @@
 - оркестрация
 - загрузка конфигурации
 - выбор provider'а
+- явный `preprocessing step` перед chunking
 - планирование чанков
 - сборка результата и доставка артефактов
 3. `internal/audio`
 - интеграция с `ffmpeg/ffprobe`
-- поиск файлов
+- поиск media-файлов
+- `preprocessing` входов в `m4a`
 - генерация чанков
 4. `internal/provider/*`
 - сборка запросов к конкретному provider'у

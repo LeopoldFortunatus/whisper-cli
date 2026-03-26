@@ -134,7 +134,7 @@ func ParseFlags(args []string) (Flags, error) {
 	set.Var(&flags.ConfigPath, "config", "Path to config file")
 	set.Var(&flags.Provider, "provider", "Provider: openai, groq, openrouter")
 	set.Var(&flags.Model, "model", "Model name")
-	set.Var(&flags.Input, "input", "Input audio file or directory")
+	set.Var(&flags.Input, "input", "Input media file or directory")
 	set.Var(&flags.OutputDir, "output-dir", "Output directory root")
 	set.Var(&flags.Language, "language", "Language code")
 	set.Var(&flags.Outputs, "outputs", "Optional artifacts: timestamps,srt,vtt,diarized,raw or none")

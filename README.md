@@ -1,10 +1,11 @@
 # whisper-cli
 
-Go CLI для локальной транскрипции аудиофайлов и директорий через OpenAI-compatible speech-to-text providers.
+Go CLI для локальной транскрипции медиафайлов и директорий через OpenAI-compatible speech-to-text providers.
 
 ## Что делает CLI
 
-- режет длинные аудиофайлы на chunks через `ffmpeg`
+- нормализует поддерживаемые аудио- и видеоформаты в `m4a` через `ffmpeg` перед транскрипцией
+- режет подготовленный media input на chunks через `ffmpeg`
 - транскрибирует chunks параллельно
 - собирает нормализованный `transcript.json` и `transcript.txt`
 - опционально пишет `timestamps.txt`, `transcript.srt`, `transcript.vtt`, `diarized.json`, `raw.json`
@@ -63,7 +64,7 @@ make build
 
 ```bash
 OPENAI_API_KEY=... ./bin/whisper-cli \
-  -input /path/to/audio.m4a \
+  -input /path/to/media.mp4 \
   -output-dir /tmp/whisper-cli \
   -provider openai \
   -model whisper-1
@@ -71,7 +72,7 @@ OPENAI_API_KEY=... ./bin/whisper-cli \
 
 ```bash
 GROQ_API_KEY=... ./bin/whisper-cli \
-  -input /path/to/audio-dir \
+  -input /path/to/media-dir \
   -output-dir /tmp/whisper-cli \
   -provider groq \
   -model whisper-large-v3-turbo \
@@ -82,11 +83,14 @@ GROQ_API_KEY=... ./bin/whisper-cli \
 
 ```bash
 OPENAI_API_KEY=... ./bin/whisper-cli \
-  -input /path/to/audio.m4a \
+  -input /path/to/media.ogg \
   -provider openai \
   -model gpt-4o-transcribe \
   -outputs none
 ```
+
+CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wav`, `webm` как входные media extensions.
+Любой поддерживаемый non-`m4a` input сначала конвертируется в `<output>/<base>/_work/source.m4a`, после чего chunking идёт уже по этому файлу.
 
 ## Флаги CLI
 
@@ -137,7 +141,7 @@ OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/a
 
 ## Выходные артефакты
 
-Для файла `lecture.m4a` CLI пишет в `<output-dir>/lecture/`:
+Для файла `lecture.mp4` CLI пишет в `<output-dir>/lecture/`:
 
 - `transcript.json`
 - `transcript.txt`
@@ -146,6 +150,10 @@ OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/a
 - `transcript.vtt` при `outputs=vtt`
 - `diarized.json` при `outputs=diarized`
 - `raw.json` при `outputs=raw`
+- `_work/source.m4a` для non-`m4a` input
+- `_work/chunk_*.m4a` как промежуточные chunk-файлы
+
+Если вход уже `lecture.m4a`, `_work/source.m4a` не создаётся.
 
 ## Проверки качества
 

@@ -97,12 +97,12 @@ func (a *Application) Run(ctx context.Context, args []string) error {
 	}
 
 	if info.IsDir() {
-		files, err := a.Audio.CollectAudioFiles(inputPath)
+		files, err := a.Audio.CollectMediaFiles(inputPath)
 		if err != nil {
 			return fmt.Errorf("scan input directory: %w", err)
 		}
 		if len(files) == 0 {
-			return errors.New("input directory does not contain supported audio files")
+			return errors.New("input directory does not contain supported media files")
 		}
 
 		var firstErr error
@@ -158,17 +158,23 @@ func (a *Application) processFile(
 ) error {
 	baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
 	fileOutputDir := filepath.Join(outputRoot, baseName)
+	fileWorkDir := filepath.Join(fileOutputDir, "_work")
 
 	if err := a.FS.MkdirAll(fileOutputDir, 0o755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
 
-	chunks, err := a.Audio.PrepareChunks(ctx, inputPath, fileOutputDir, cfg.ChunkSeconds)
+	prepared, err := a.Audio.PrepareInput(ctx, inputPath, fileWorkDir)
 	if err != nil {
 		return err
 	}
 
-	transcript, rawArtifacts, err := a.transcribeChunks(ctx, client, cfg, inputPath, chunks)
+	chunks, err := a.Audio.PrepareChunks(ctx, prepared.ChunkSourcePath, fileWorkDir, cfg.ChunkSeconds)
+	if err != nil {
+		return err
+	}
+
+	transcript, rawArtifacts, err := a.transcribeChunks(ctx, client, cfg, prepared.OriginalPath, chunks)
 	if err != nil {
 		return err
 	}

@@ -18,19 +18,73 @@ import (
 	"github.com/rs/zerolog"
 )
 
+type prepareInputCall struct {
+	inputFile string
+	workDir   string
+}
+
+type prepareChunksCall struct {
+	inputFile    string
+	workDir      string
+	chunkSeconds int
+}
+
 type fakeAudioPipeline struct {
-	chunks []audio.Chunk
+	mediaFiles         []string
+	preparedInput      audio.PreparedInput
+	chunks             []audio.Chunk
+	ensureErr          error
+	collectErr         error
+	prepareInputErr    error
+	prepareChunksErr   error
+	collectCalls       []string
+	prepareInputCalls  []prepareInputCall
+	prepareChunksCalls []prepareChunksCall
+	callOrder          []string
 }
 
-func (f fakeAudioPipeline) EnsureBinaries() error {
-	return nil
+func (f *fakeAudioPipeline) EnsureBinaries() error {
+	f.callOrder = append(f.callOrder, "ensure")
+	return f.ensureErr
 }
 
-func (f fakeAudioPipeline) CollectAudioFiles(dir string) ([]string, error) {
-	return nil, errors.New("not implemented")
+func (f *fakeAudioPipeline) CollectMediaFiles(dir string) ([]string, error) {
+	f.callOrder = append(f.callOrder, "collect")
+	f.collectCalls = append(f.collectCalls, dir)
+	if f.collectErr != nil {
+		return nil, f.collectErr
+	}
+	return f.mediaFiles, nil
 }
 
-func (f fakeAudioPipeline) PrepareChunks(context.Context, string, string, int) ([]audio.Chunk, error) {
+func (f *fakeAudioPipeline) PrepareInput(_ context.Context, inputFile string, workDir string) (audio.PreparedInput, error) {
+	f.callOrder = append(f.callOrder, "prepare_input")
+	f.prepareInputCalls = append(f.prepareInputCalls, prepareInputCall{
+		inputFile: inputFile,
+		workDir:   workDir,
+	})
+	if f.prepareInputErr != nil {
+		return audio.PreparedInput{}, f.prepareInputErr
+	}
+	if f.preparedInput.OriginalPath == "" && f.preparedInput.ChunkSourcePath == "" && !f.preparedInput.Converted {
+		return audio.PreparedInput{
+			OriginalPath:    inputFile,
+			ChunkSourcePath: inputFile,
+		}, nil
+	}
+	return f.preparedInput, nil
+}
+
+func (f *fakeAudioPipeline) PrepareChunks(_ context.Context, inputFile string, workDir string, chunkSeconds int) ([]audio.Chunk, error) {
+	f.callOrder = append(f.callOrder, "prepare_chunks")
+	f.prepareChunksCalls = append(f.prepareChunksCalls, prepareChunksCall{
+		inputFile:    inputFile,
+		workDir:      workDir,
+		chunkSeconds: chunkSeconds,
+	})
+	if f.prepareChunksErr != nil {
+		return nil, f.prepareChunksErr
+	}
 	return f.chunks, nil
 }
 
@@ -73,12 +127,19 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 
 	logger := zerolog.New(io.Discard)
 	dir := t.TempDir()
-	input := filepath.Join(dir, "input.m4a")
+	input := filepath.Join(dir, "input.mp3")
 	if err := os.WriteFile(input, []byte("x"), 0o644); err != nil {
 		t.Fatalf("write input: %v", err)
 	}
+	outputRoot := filepath.Join(dir, "out")
+	workDir := filepath.Join(outputRoot, "input", "_work")
 
-	audioPipeline := fakeAudioPipeline{
+	audioPipeline := &fakeAudioPipeline{
+		preparedInput: audio.PreparedInput{
+			OriginalPath:    input,
+			ChunkSourcePath: filepath.Join(workDir, "source.m4a"),
+			Converted:       true,
+		},
 		chunks: []audio.Chunk{
 			{Number: 1, Path: "chunk-1", Offset: 5},
 			{Number: 0, Path: "chunk-0", Offset: 0},
@@ -125,7 +186,6 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 		Env:      staticEnv{},
 	}
 
-	outputRoot := filepath.Join(dir, "out")
 	err := app.Run(context.Background(), []string{
 		"-input", input,
 		"-output-dir", outputRoot,
@@ -135,6 +195,28 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if strings.Join(audioPipeline.callOrder, ",") != "ensure,prepare_input,prepare_chunks" {
+		t.Fatalf("unexpected call order: %v", audioPipeline.callOrder)
+	}
+	if len(audioPipeline.prepareInputCalls) != 1 {
+		t.Fatalf("prepare input calls = %d, want 1", len(audioPipeline.prepareInputCalls))
+	}
+	if audioPipeline.prepareInputCalls[0].inputFile != input {
+		t.Fatalf("PrepareInput input = %s, want %s", audioPipeline.prepareInputCalls[0].inputFile, input)
+	}
+	if audioPipeline.prepareInputCalls[0].workDir != workDir {
+		t.Fatalf("PrepareInput workDir = %s, want %s", audioPipeline.prepareInputCalls[0].workDir, workDir)
+	}
+	if len(audioPipeline.prepareChunksCalls) != 1 {
+		t.Fatalf("prepare chunks calls = %d, want 1", len(audioPipeline.prepareChunksCalls))
+	}
+	if audioPipeline.prepareChunksCalls[0].inputFile != filepath.Join(workDir, "source.m4a") {
+		t.Fatalf("PrepareChunks input = %s", audioPipeline.prepareChunksCalls[0].inputFile)
+	}
+	if audioPipeline.prepareChunksCalls[0].workDir != workDir {
+		t.Fatalf("PrepareChunks workDir = %s, want %s", audioPipeline.prepareChunksCalls[0].workDir, workDir)
 	}
 
 	outDir := filepath.Join(outputRoot, "input")
@@ -165,6 +247,21 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 	if len(rawItems) != 2 {
 		t.Fatalf("raw item count = %d", len(rawItems))
 	}
+
+	transcriptJSON, err := os.ReadFile(filepath.Join(outDir, "transcript.json"))
+	if err != nil {
+		t.Fatalf("read transcript.json: %v", err)
+	}
+	var transcript domain.Transcript
+	if err := json.Unmarshal(transcriptJSON, &transcript); err != nil {
+		t.Fatalf("unmarshal transcript.json: %v", err)
+	}
+	if transcript.Source != input {
+		t.Fatalf("transcript source = %s, want %s", transcript.Source, input)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "_work", "transcript.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no transcript artifacts in _work, stat err = %v", err)
+	}
 }
 
 func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
@@ -177,13 +274,14 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 		t.Fatalf("write input: %v", err)
 	}
 
-	app := &Application{
-		FS: fsx.OS{},
-		Audio: fakeAudioPipeline{
-			chunks: []audio.Chunk{
-				{Number: 0, Path: "chunk-0", Offset: 0},
-			},
+	audioPipeline := &fakeAudioPipeline{
+		chunks: []audio.Chunk{
+			{Number: 0, Path: "chunk-0", Offset: 0},
 		},
+	}
+	app := &Application{
+		FS:    fsx.OS{},
+		Audio: audioPipeline,
 		Registry: provider.NewRegistry(fakeProvider{
 			name: domain.ProviderOpenAI,
 			capabilities: map[string]domain.Capabilities{
@@ -238,7 +336,7 @@ func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 
 	app := &Application{
 		FS:    fsx.OS{},
-		Audio: fakeAudioPipeline{},
+		Audio: &fakeAudioPipeline{},
 		Registry: provider.NewRegistry(fakeProvider{
 			name: domain.ProviderOpenAI,
 			capabilities: map[string]domain.Capabilities{
@@ -260,5 +358,50 @@ func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "does not support srt artifacts") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplicationRunRejectsEmptyMediaDirectory(t *testing.T) {
+	t.Parallel()
+
+	logger := zerolog.New(io.Discard)
+	dir := t.TempDir()
+	inputDir := filepath.Join(dir, "input-dir")
+	if err := os.Mkdir(inputDir, 0o755); err != nil {
+		t.Fatalf("mkdir input dir: %v", err)
+	}
+
+	audioPipeline := &fakeAudioPipeline{}
+	app := &Application{
+		FS:    fsx.OS{},
+		Audio: audioPipeline,
+		Registry: provider.NewRegistry(fakeProvider{
+			name: domain.ProviderOpenAI,
+			capabilities: map[string]domain.Capabilities{
+				"whisper-1": {
+					SupportsPrompt:            true,
+					SupportsSegmentTimestamps: true,
+					SupportsSRT:               true,
+					SupportsVTT:               true,
+				},
+			},
+		}),
+		Logger: logger,
+		Env:    config.OSEnv{},
+	}
+
+	err := app.Run(context.Background(), []string{
+		"-input", inputDir,
+		"-provider", "openai",
+		"-model", "whisper-1",
+	})
+	if err == nil {
+		t.Fatalf("expected error for empty input directory")
+	}
+	if !strings.Contains(err.Error(), "supported media files") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(audioPipeline.collectCalls) != 1 || audioPipeline.collectCalls[0] != inputDir {
+		t.Fatalf("collect calls = %v, want [%s]", audioPipeline.collectCalls, inputDir)
 	}
 }
