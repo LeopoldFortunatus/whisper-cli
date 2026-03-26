@@ -160,6 +160,12 @@ func (a *Application) processFile(
 	fileOutputDir := filepath.Join(outputRoot, baseName)
 	fileWorkDir := filepath.Join(fileOutputDir, "_work")
 
+	a.Logger.Info().
+		Str("input", inputPath).
+		Str("output_dir", fileOutputDir).
+		Str("work_dir", fileWorkDir).
+		Msg("processing input file")
+
 	if err := a.FS.MkdirAll(fileOutputDir, 0o755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
@@ -168,18 +174,46 @@ func (a *Application) processFile(
 	if err != nil {
 		return err
 	}
+	logEvent := a.Logger.Info().
+		Str("input", prepared.OriginalPath).
+		Str("chunk_source", prepared.ChunkSourcePath).
+		Str("work_dir", fileWorkDir)
+	if prepared.Converted {
+		logEvent.Msg("converted input to m4a for preprocessing")
+	} else {
+		logEvent.Msg("input already m4a; skipping conversion")
+	}
+
+	a.Logger.Info().
+		Str("input", prepared.OriginalPath).
+		Str("chunk_source", prepared.ChunkSourcePath).
+		Str("work_dir", fileWorkDir).
+		Int("chunk_seconds", cfg.ChunkSeconds).
+		Msg("preparing chunks")
 
 	chunks, err := a.Audio.PrepareChunks(ctx, prepared.ChunkSourcePath, fileWorkDir, cfg.ChunkSeconds)
 	if err != nil {
 		return err
 	}
+	a.Logger.Info().
+		Str("input", prepared.OriginalPath).
+		Str("work_dir", fileWorkDir).
+		Int("chunks", len(chunks)).
+		Msg("prepared chunks")
 
 	transcript, rawArtifacts, err := a.transcribeChunks(ctx, client, cfg, prepared.OriginalPath, chunks)
 	if err != nil {
 		return err
 	}
 
-	return output.WriteArtifacts(a.FS, fileOutputDir, transcript, cfg.Outputs, rawArtifacts)
+	if err := output.WriteArtifacts(a.FS, fileOutputDir, transcript, cfg.Outputs, rawArtifacts); err != nil {
+		return err
+	}
+	a.Logger.Info().
+		Str("input", prepared.OriginalPath).
+		Str("output_dir", fileOutputDir).
+		Msg("wrote transcript artifacts")
+	return nil
 }
 
 type chunkResult struct {
