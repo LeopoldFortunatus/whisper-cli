@@ -1,7 +1,7 @@
 # Дорожная карта
 
 Владелец: Platform Team
-Проверено: 2026-03-25
+Проверено: 2026-03-26
 
 ## Done
 
@@ -39,7 +39,14 @@
 - нет
 
 ## Planned
-- нет
+
+### RM-010 Secure Linux API Key Resolution
+- определить безопасный `runtime contract` для чтения API keys в Linux, включая допустимые источники секретов и их приоритет
+- решить, как и откуда CLI должен получать ключи без утечки в shell history, `process list`, world-readable config files или `git-tracked state`
+
+### RM-011 Bash Completion
+- добавить `bash completion` для основных флагов CLI и предсказуемый способ установки completion script в Linux
+- определить, какие значения должны подсказываться динамически (`provider`, `outputs`, совместимые модели), а какие остаются обычным `file path completion`
 
 ## Blocked
 
