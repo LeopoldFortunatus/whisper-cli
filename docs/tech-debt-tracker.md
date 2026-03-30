@@ -1,7 +1,7 @@
 # Реестр техдолга
 
 Владелец: Platform Team
-Проверено: 2026-03-25
+Проверено: 2026-03-30
 
 ## Active
 
@@ -28,6 +28,10 @@
 ### TD-008 Coverage для provider contract слишком тонкий вне OpenAI
 - Влияние: `internal/provider helper layer` остаётся без `unit coverage`, а `Groq adapter` покрыт в основном только `preflight test`, поэтому drift в `retry/parser/request-shape` может пройти через `make ci`.
 - План: добавить `deterministic unit tests` для `Retry`, `ParseOpenAICompatibleTranscript`, `MarshalRawArray` и `Groq request construction/response parsing`.
+
+### TD-009 CLI и bash completion всё ещё на hand-rolled implementation, а legacy YAML расширяет runtime surface
+- Влияние: текущий `flag`/custom completion слой и поддержка `legacy YAML config` усложняют сопровождение `help`, `subcommands`, `shell completion` и общего `CLI UX contract`, потому что часть поведения и совместимости приходится поддерживать вручную.
+- План: перевести `command tree` и `bash completion` на `cobra`, убрать поддержку `legacy YAML config`, зафиксировать целевой контракт `flags > env > defaults` и добавить `smoke/integration coverage` для `help`, `parse failures` и `completion bash`.
 ## Closed
 
 ### TD-003 добавить make targets build/install

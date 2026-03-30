@@ -1,7 +1,7 @@
 # AGENTS Map
 
 Owner: Platform Team
-Last Verified: 2026-03-25
+Last Verified: 2026-03-30
 
 Этот файл - короткая карта. Истина живёт в `docs/` и рядом с кодом.
 
@@ -49,3 +49,4 @@ Last Verified: 2026-03-25
 7. Runtime output и локальные config/env файлы не хранятся в git-tracked state.
 8. Новое правило должно быть проверяемым тестом или `make`-gate.
 9. По умолчанию пиши по-русски; English используй только для устойчивых technical terms, имён команд, API и code identifiers.
+10. Прежде чем писать свой код, проверь, нет ли под этот функционал нормального framework.
