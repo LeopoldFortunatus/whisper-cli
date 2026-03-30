@@ -1,7 +1,7 @@
 # Дорожная карта
 
 Владелец: Platform Team
-Проверено: 2026-03-26
+Проверено: 2026-03-27
 
 ## Done
 
@@ -34,6 +34,10 @@
 - поддерживаемые non-`m4a` аудио- и видеоформаты автоматически нормализуются в `m4a` через явный `preprocessing step`
 - промежуточные `source/chunk` артефакты вынесены в `<output>/<base>/_work/`, а `provider adapters` остались без скрытой orchestration-логики
 
+### RM-011 Bash Completion
+- добавлены `whisper-cli completion bash` и `make install-bash-completion` для предсказуемого Linux install contract
+- `provider`, `outputs` и совместимые `models` теперь подсказываются детерминированно без запуска runtime/preflight path
+
 ## In Progress
 
 - нет
@@ -43,10 +47,6 @@
 ### RM-010 Secure Linux API Key Resolution
 - определить безопасный `runtime contract` для чтения API keys в Linux, включая допустимые источники секретов и их приоритет
 - решить, как и откуда CLI должен получать ключи без утечки в shell history, `process list`, world-readable config files или `git-tracked state`
-
-### RM-011 Bash Completion
-- добавить `bash completion` для основных флагов CLI и предсказуемый способ установки completion script в Linux
-- определить, какие значения должны подсказываться динамически (`provider`, `outputs`, совместимые модели), а какие остаются обычным `file path completion`
 
 ## Blocked
 

@@ -141,3 +141,19 @@ func TestProviderPreflightRequiresKey(t *testing.T) {
 		t.Fatalf("expected preflight error for missing key")
 	}
 }
+
+func TestProviderSupportedModelsAreSorted(t *testing.T) {
+	t.Parallel()
+
+	client := New("test-key", fsx.OS{}, zerolog.New(io.Discard))
+	models := client.SupportedModels()
+	want := []string{
+		"gpt-4o-mini-transcribe",
+		"gpt-4o-transcribe",
+		"gpt-4o-transcribe-diarize",
+		"whisper-1",
+	}
+	if strings.Join(models, ",") != strings.Join(want, ",") {
+		t.Fatalf("supported models = %v, want %v", models, want)
+	}
+}

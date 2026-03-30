@@ -1,12 +1,13 @@
 # Архитектура
 
 Владелец: Platform Team
-Проверено: 2026-03-25
+Проверено: 2026-03-27
 
 ## Слои
 
 1. `main.go`
-- только bootstrap и запуск `internal/app`
+- bootstrap CLI
+- dispatch для `help/completion`
 2. `internal/app`
 - оркестрация
 - загрузка конфигурации
@@ -14,20 +15,27 @@
 - явный `preprocessing step` перед chunking
 - планирование чанков
 - сборка результата и доставка артефактов
-3. `internal/audio`
+3. `internal/config`
+- парсинг `flags`
+- резолв `flags > env > YAML > defaults`
+- единый metadata-source для CLI flag contract
+4. `internal/completion`
+- генерация `bash completion` script
+- использование metadata из `internal/config` и provider model registry без запуска runtime orchestration
+5. `internal/audio`
 - интеграция с `ffmpeg/ffprobe`
 - поиск media-файлов
 - `preprocessing` входов в `m4a`
 - генерация чанков
-4. `internal/provider/*`
+6. `internal/provider/*`
 - сборка запросов к конкретному provider'у
 - ретраи
 - разбор `raw-response`
-5. `internal/output`
+7. `internal/output`
 - сериализация и запись артефактов
-6. `internal/domain`
+8. `internal/domain`
 - нормализованные типы transcript'а и модель capabilities
-7. `internal/platform/*`
+9. `internal/platform/*`
 - тонкие обёртки над файловой системой ОС и запуском команд
 
 ## Границы
@@ -37,6 +45,7 @@
 3. `internal/audio` не знает о transcript-модели и provider'ах.
 4. `internal/domain` не зависит от SDK, ОС или парсинга CLI.
 5. `internal/config` не тянет оркестрацию и network logic.
+6. `internal/completion` не делает `provider preflight`, не требует `ffmpeg` и не запускает normal transcription flow.
 
 ## Ключевые решения
 

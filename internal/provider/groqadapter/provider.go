@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/arykalin/whisper-cli/internal/domain"
 	"github.com/arykalin/whisper-cli/internal/platform/fsx"
@@ -64,6 +65,15 @@ func (p *Provider) Preflight() error {
 func (p *Provider) Capabilities(model string) (domain.Capabilities, bool) {
 	caps, ok := capabilities[model]
 	return caps, ok
+}
+
+func (p *Provider) SupportedModels() []string {
+	models := make([]string, 0, len(capabilities))
+	for model := range capabilities {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	return models
 }
 
 func (p *Provider) Transcribe(ctx context.Context, req provider.Request) (provider.Response, error) {

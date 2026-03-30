@@ -26,6 +26,7 @@ type Client interface {
 	Name() domain.Provider
 	Preflight() error
 	Capabilities(model string) (domain.Capabilities, bool)
+	SupportedModels() []string
 	Transcribe(ctx context.Context, req Request) (Response, error)
 }
 
@@ -70,6 +71,10 @@ func (b blockedClient) Preflight() error {
 
 func (b blockedClient) Capabilities(string) (domain.Capabilities, bool) {
 	return domain.Capabilities{}, false
+}
+
+func (b blockedClient) SupportedModels() []string {
+	return nil
 }
 
 func (b blockedClient) Transcribe(context.Context, Request) (Response, error) {

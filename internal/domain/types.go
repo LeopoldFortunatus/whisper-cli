@@ -32,6 +32,15 @@ var knownArtifacts = map[ArtifactKind]struct{}{
 	ArtifactRaw:        {},
 }
 
+func KnownArtifacts() []ArtifactKind {
+	items := make([]ArtifactKind, 0, len(knownArtifacts))
+	for kind := range knownArtifacts {
+		items = append(items, kind)
+	}
+	slices.Sort(items)
+	return items
+}
+
 type ArtifactSet map[ArtifactKind]bool
 
 func DefaultArtifacts() ArtifactSet {

@@ -5,10 +5,11 @@ BUILD_DIR ?= bin
 BUILD_PATH ?= $(BUILD_DIR)/$(BIN_NAME)
 INSTALL_DIR ?= $(HOME)/.local/bin
 INSTALL_PATH ?= $(INSTALL_DIR)/$(BIN_NAME)
+BASH_COMPLETION_DIR ?= $(HOME)/.local/share/bash-completion/completions
 GOFILES := $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 GOLANGCI_LINT ?= golangci-lint
 
-.PHONY: build install fmt fmt-check lint test vet docs-check ci test-live-openai test-live-openai-diarize test-live-groq
+.PHONY: build install install-bash-completion fmt fmt-check lint test vet docs-check ci test-live-openai test-live-openai-diarize test-live-groq
 
 build:
 	mkdir -p "$(BUILD_DIR)"
@@ -17,6 +18,10 @@ build:
 install: build
 	mkdir -p "$(INSTALL_DIR)"
 	cp "$(BUILD_PATH)" "$(INSTALL_PATH)"
+
+install-bash-completion: build
+	mkdir -p "$(BASH_COMPLETION_DIR)"
+	"$(BUILD_PATH)" completion bash > "$(BASH_COMPLETION_DIR)/$(BIN_NAME)"
 
 fmt:
 	gofmt -w $(GOFILES)

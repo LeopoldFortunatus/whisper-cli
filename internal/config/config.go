@@ -18,6 +18,48 @@ import (
 
 const defaultConfigPath = "config.yaml"
 
+type FlagValueType string
+
+const (
+	FlagValuePlain         FlagValueType = "plain"
+	FlagValueFilePath      FlagValueType = "file_path"
+	FlagValueInputPath     FlagValueType = "input_path"
+	FlagValueDirectoryPath FlagValueType = "directory_path"
+	FlagValueProvider      FlagValueType = "provider"
+	FlagValueModel         FlagValueType = "model"
+	FlagValueOutputs       FlagValueType = "outputs"
+)
+
+type FlagSpec struct {
+	Name      string
+	Usage     string
+	ValueType FlagValueType
+}
+
+const DefaultProvider = domain.ProviderOpenAI
+
+const completionUsageHint = `
+Additional commands:
+  completion bash   Print Bash completion script to stdout
+`
+
+var cliFlagSpecs = []FlagSpec{
+	{Name: "chunk-seconds", Usage: "Chunk size in seconds", ValueType: FlagValuePlain},
+	{Name: "concurrency", Usage: "Number of worker goroutines", ValueType: FlagValuePlain},
+	{Name: "config", Usage: "Path to config file", ValueType: FlagValueFilePath},
+	{Name: "input", Usage: "Input media file or directory", ValueType: FlagValueInputPath},
+	{Name: "language", Usage: "Language code", ValueType: FlagValuePlain},
+	{Name: "model", Usage: "Model name", ValueType: FlagValueModel},
+	{Name: "output-dir", Usage: "Output directory root", ValueType: FlagValueDirectoryPath},
+	{Name: "outputs", Usage: "Optional artifacts: timestamps,srt,vtt,diarized,raw or none", ValueType: FlagValueOutputs},
+	{Name: "prompt", Usage: "Prompt for supported models", ValueType: FlagValuePlain},
+	{Name: "provider", Usage: "Provider: openai, groq, openrouter", ValueType: FlagValueProvider},
+}
+
+func CLIFlagSpecs() []FlagSpec {
+	return append([]FlagSpec(nil), cliFlagSpecs...)
+}
+
 type StringFlag struct {
 	Value    string
 	Provided bool
@@ -127,20 +169,7 @@ func ParseFlags(args []string) (Flags, error) {
 	flags := Flags{}
 	flags.ConfigPath.Value = defaultConfigPath
 
-	set := flag.NewFlagSet("whisper-cli", flag.ContinueOnError)
-	var stderr bytes.Buffer
-	set.SetOutput(&stderr)
-
-	set.Var(&flags.ConfigPath, "config", "Path to config file")
-	set.Var(&flags.Provider, "provider", "Provider: openai, groq, openrouter")
-	set.Var(&flags.Model, "model", "Model name")
-	set.Var(&flags.Input, "input", "Input media file or directory")
-	set.Var(&flags.OutputDir, "output-dir", "Output directory root")
-	set.Var(&flags.Language, "language", "Language code")
-	set.Var(&flags.Outputs, "outputs", "Optional artifacts: timestamps,srt,vtt,diarized,raw or none")
-	set.Var(&flags.ChunkSeconds, "chunk-seconds", "Chunk size in seconds")
-	set.Var(&flags.Concurrency, "concurrency", "Number of worker goroutines")
-	set.Var(&flags.Prompt, "prompt", "Prompt for supported models")
+	set, stderr := newFlagSet(&flags)
 
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -166,7 +195,7 @@ func Resolve(flags Flags, env EnvSource, fs fsx.FS) (Config, []string, error) {
 		warnings = append(warnings, "config field input_file is deprecated; use input")
 	}
 
-	providerName := chooseString(flags.Provider, env, "WHISPER_CLI_PROVIDER", fileCfg.Provider, string(domain.ProviderOpenAI))
+	providerName := chooseString(flags.Provider, env, "WHISPER_CLI_PROVIDER", fileCfg.Provider, string(DefaultProvider))
 	model := chooseString(flags.Model, env, "WHISPER_CLI_MODEL", fileCfg.Model, "")
 	if model == "" && fileCfg.UseGPT4 != nil {
 		model = legacyModel(*fileCfg.UseGPT4)
@@ -286,5 +315,47 @@ func defaultModelForProvider(providerName string) string {
 		return "whisper-large-v3-turbo"
 	default:
 		return "whisper-1"
+	}
+}
+
+func newFlagSet(flags *Flags) (*flag.FlagSet, *bytes.Buffer) {
+	set := flag.NewFlagSet("whisper-cli", flag.ContinueOnError)
+	var stderr bytes.Buffer
+	set.SetOutput(&stderr)
+	set.Usage = func() {
+		fmt.Fprintf(&stderr, "Usage of %s:\n", set.Name())
+		set.PrintDefaults()
+		fmt.Fprint(&stderr, completionUsageHint)
+	}
+	registerFlags(set, flags)
+	return set, &stderr
+}
+
+func registerFlags(set *flag.FlagSet, flags *Flags) {
+	for _, spec := range cliFlagSpecs {
+		switch spec.Name {
+		case "config":
+			set.Var(&flags.ConfigPath, spec.Name, spec.Usage)
+		case "provider":
+			set.Var(&flags.Provider, spec.Name, spec.Usage)
+		case "model":
+			set.Var(&flags.Model, spec.Name, spec.Usage)
+		case "input":
+			set.Var(&flags.Input, spec.Name, spec.Usage)
+		case "output-dir":
+			set.Var(&flags.OutputDir, spec.Name, spec.Usage)
+		case "language":
+			set.Var(&flags.Language, spec.Name, spec.Usage)
+		case "outputs":
+			set.Var(&flags.Outputs, spec.Name, spec.Usage)
+		case "chunk-seconds":
+			set.Var(&flags.ChunkSeconds, spec.Name, spec.Usage)
+		case "concurrency":
+			set.Var(&flags.Concurrency, spec.Name, spec.Usage)
+		case "prompt":
+			set.Var(&flags.Prompt, spec.Name, spec.Usage)
+		default:
+			panic("unsupported CLI flag spec: " + spec.Name)
+		}
 	}
 }

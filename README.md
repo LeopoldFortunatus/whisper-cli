@@ -56,6 +56,25 @@ make install
 `make install` создаёт `~/.local/bin` при необходимости и копирует туда бинарник.
 Для проверки без записи в домашний каталог можно переопределить `INSTALL_DIR`, например `make install INSTALL_DIR=/tmp/whisper-cli-bin`.
 
+## Bash completion
+
+Разовый вариант без установки completion-файла:
+
+```bash
+make build
+source <(./bin/whisper-cli completion bash)
+```
+
+Постоянная установка completion в Linux:
+
+```bash
+make install-bash-completion
+```
+
+`make install-bash-completion` создаёт `~/.local/share/bash-completion/completions` при необходимости и пишет туда `whisper-cli` completion script.
+Для проверки без записи в домашний каталог можно переопределить `BASH_COMPLETION_DIR`, например `make install-bash-completion BASH_COMPLETION_DIR=/tmp/whisper-cli-completion`.
+CLI-команда `whisper-cli completion bash` печатает script в `stdout` и не требует `API key` или `ffmpeg`.
+
 ## Быстрый старт
 
 ```bash
@@ -93,6 +112,10 @@ CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wa
 Любой поддерживаемый non-`m4a` input сначала конвертируется в `<output>/<base>/_work/source.m4a`, после чего chunking идёт уже по этому файлу.
 
 ## Флаги CLI
+
+Дополнительная команда:
+
+- `completion bash`
 
 - `-config`
 - `-provider`

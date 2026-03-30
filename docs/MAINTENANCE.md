@@ -1,13 +1,16 @@
 # Эксплуатация
 
 Владелец: Platform Team
-Проверено: 2026-03-25
+Проверено: 2026-03-27
 
 ## Локальный build contract
 
 - `make build` пишет бинарник в `./bin/whisper-cli`
 - `make install` копирует `./bin/whisper-cli` в `~/.local/bin/whisper-cli` и создаёт `~/.local/bin`, если каталога ещё нет
 - для непостоянной установки или проверки можно переопределить `INSTALL_DIR`, например `make install INSTALL_DIR=/tmp/whisper-cli-bin`
+- `make install-bash-completion` пишет completion script в `~/.local/share/bash-completion/completions/whisper-cli` и создаёт каталог при необходимости
+- для проверки completion install без записи в домашний каталог можно переопределить `BASH_COMPLETION_DIR`, например `make install-bash-completion BASH_COMPLETION_DIR=/tmp/whisper-cli-completion`
+- разовый вариант без install target: `source <(./bin/whisper-cli completion bash)`
 
 ## Локальный quality loop
 

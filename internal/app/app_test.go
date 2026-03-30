@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -105,6 +106,15 @@ func (f fakeProvider) Preflight() error {
 func (f fakeProvider) Capabilities(model string) (domain.Capabilities, bool) {
 	caps, ok := f.capabilities[model]
 	return caps, ok
+}
+
+func (f fakeProvider) SupportedModels() []string {
+	models := make([]string, 0, len(f.capabilities))
+	for model := range f.capabilities {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	return models
 }
 
 func (f fakeProvider) Transcribe(ctx context.Context, req provider.Request) (provider.Response, error) {
