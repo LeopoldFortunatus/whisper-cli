@@ -1,7 +1,7 @@
 # Эксплуатация
 
 Владелец: Platform Team
-Проверено: 2026-03-27
+Проверено: 2026-04-14
 
 ## Локальный build contract
 
@@ -11,6 +11,7 @@
 - `make install-bash-completion` пишет completion script в `~/.local/share/bash-completion/completions/whisper-cli` и создаёт каталог при необходимости
 - для проверки completion install без записи в домашний каталог можно переопределить `BASH_COMPLETION_DIR`, например `make install-bash-completion BASH_COMPLETION_DIR=/tmp/whisper-cli-completion`
 - разовый вариант без install target: `source <(./bin/whisper-cli completion bash)`
+- runtime config резолвится только через `flags > env > defaults`; `config.yaml` больше не участвует в CLI contract
 
 ## Локальный quality loop
 

@@ -1,69 +1,119 @@
 package main
 
 import (
-	"bytes"
-	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-func TestRunPrintsHelpWithoutError(t *testing.T) {
-	t.Parallel()
+func TestBashCompletionSmoke(t *testing.T) {
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "whisper-cli")
+	scriptPath := filepath.Join(dir, "whisper-cli.bash")
 
-	var stdout bytes.Buffer
-	if err := run(context.Background(), []string{"-h"}, &stdout); err != nil {
-		t.Fatalf("run returned error: %v", err)
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Env = append(os.Environ(), "GOFLAGS=-mod=vendor")
+	output, err := build.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build binary: %v\n%s", err, output)
 	}
 
-	output := stdout.String()
-	if !strings.Contains(output, "Usage of whisper-cli:") {
-		t.Fatalf("help output did not contain usage header: %q", output)
+	script, err := exec.Command(binPath, "completion", "bash").Output()
+	if err != nil {
+		t.Fatalf("generate bash completion: %v", err)
 	}
-	if !strings.Contains(output, "-input") {
-		t.Fatalf("help output did not contain flag descriptions: %q", output)
+	if err := os.WriteFile(scriptPath, script, 0o644); err != nil {
+		t.Fatalf("write completion script: %v", err)
 	}
-	if !strings.Contains(output, "completion bash") {
-		t.Fatalf("help output did not mention completion command: %q", output)
+
+	providers := completeWords(t, dir, scriptPath, []string{"whisper-cli", "--provider", "o"})
+	if !slices.Equal(providers, []string{"openai"}) {
+		t.Fatalf("provider completion = %v, want [openai]", providers)
+	}
+
+	models := completeWords(t, dir, scriptPath, []string{"whisper-cli", "--provider", "groq", "--model", "whisper"})
+	wantModels := []string{"whisper-large-v3", "whisper-large-v3-turbo"}
+	if !slices.Equal(models, wantModels) {
+		t.Fatalf("model completion = %v, want %v", models, wantModels)
+	}
+	for _, reply := range models {
+		if strings.Contains(reply, "gpt-4o") {
+			t.Fatalf("unexpected openai model in groq completion: %v", models)
+		}
+	}
+
+	outputs := completeWords(t, dir, scriptPath, []string{"whisper-cli", "--outputs", "timestamps,s"})
+	if !slices.Equal(outputs, []string{"timestamps,srt"}) {
+		t.Fatalf("outputs completion = %v, want [timestamps,srt]", outputs)
+	}
+
+	none := completeWords(t, dir, scriptPath, []string{"whisper-cli", "--outputs", "n"})
+	if !slices.Equal(none, []string{"none"}) {
+		t.Fatalf("none completion = %v, want [none]", none)
 	}
 }
 
-func TestRunPrintsBashCompletionWithoutError(t *testing.T) {
-	t.Parallel()
+func completeWords(t *testing.T, binDir string, scriptPath string, words []string) []string {
+	t.Helper()
 
-	var stdout bytes.Buffer
-	if err := run(context.Background(), []string{"completion", "bash"}, &stdout); err != nil {
-		t.Fatalf("run returned error: %v", err)
+	cmd := exec.Command("bash", "-lc", fmt.Sprintf(`
+PATH=%q:$PATH
+_get_comp_words_by_ref() {
+    if [[ $1 == "-n" ]]; then
+        shift 2
+    fi
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            cur)
+                printf -v "$1" '%%s' "${COMP_WORDS[COMP_CWORD]}"
+                ;;
+            prev)
+                local prevValue=""
+                if (( COMP_CWORD > 0 )); then
+                    prevValue=${COMP_WORDS[COMP_CWORD-1]}
+                fi
+                printf -v "$1" '%%s' "$prevValue"
+                ;;
+            words)
+                eval "$1=(\"\${COMP_WORDS[@]}\")"
+                ;;
+            cword)
+                printf -v "$1" '%%s' "$COMP_CWORD"
+                ;;
+        esac
+        shift
+    done
+}
+source %q
+fn=$(complete -p whisper-cli | sed -n 's/.*-F \([^ ]*\) whisper-cli/\1/p')
+COMP_WORDS=(%s)
+COMP_CWORD=%d
+COMP_LINE=%q
+COMP_POINT=%d
+COMP_TYPE=9
+"$fn"
+printf '%%s\n' "${COMPREPLY[@]}"
+`, binDir, scriptPath, bashWords(words), len(words)-1, strings.Join(words, " "), len(strings.Join(words, " "))))
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("run bash completion smoke: %v", err)
 	}
 
-	output := stdout.String()
-	if !strings.Contains(output, "_whisper_cli()") {
-		t.Fatalf("completion output did not contain completion function: %q", output)
+	trimmed := strings.TrimSpace(string(output))
+	if trimmed == "" {
+		return nil
 	}
-	if !strings.Contains(output, "complete -F _whisper_cli whisper-cli") {
-		t.Fatalf("completion output did not contain registration line: %q", output)
-	}
+	return strings.Split(trimmed, "\n")
 }
 
-func TestRunRejectsInvalidCompletionArgs(t *testing.T) {
-	t.Parallel()
-
-	tests := [][]string{
-		{"completion"},
-		{"completion", "zsh"},
-		{"completion", "bash", "extra"},
+func bashWords(words []string) string {
+	quoted := make([]string, 0, len(words))
+	for _, word := range words {
+		quoted = append(quoted, fmt.Sprintf("%q", word))
 	}
-
-	for _, args := range tests {
-		var stdout bytes.Buffer
-		err := run(context.Background(), args, &stdout)
-		if err == nil {
-			t.Fatalf("run(%v) returned nil error", args)
-		}
-		if !strings.Contains(err.Error(), "usage: whisper-cli completion bash") {
-			t.Fatalf("run(%v) error = %q", args, err)
-		}
-		if stdout.Len() != 0 {
-			t.Fatalf("run(%v) unexpectedly wrote to stdout: %q", args, stdout.String())
-		}
-	}
+	return strings.Join(quoted, " ")
 }

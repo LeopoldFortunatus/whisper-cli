@@ -1,7 +1,7 @@
 # AGENTS Map
 
 Owner: Platform Team
-Last Verified: 2026-03-30
+Last Verified: 2026-04-14
 
 Этот файл - короткая карта. Истина живёт в `docs/` и рядом с кодом.
 
@@ -45,7 +45,7 @@ Last Verified: 2026-03-30
 3. Provider adapters не тянут orchestration внутрь себя.
 4. Normalized transcript model живёт в `internal/domain`.
 5. Артефакты пишет только `internal/output`.
-6. Конфиг резолвится через `flags > env > YAML > defaults`.
+6. Конфиг резолвится через `flags > env > defaults`.
 7. Runtime output и локальные config/env файлы не хранятся в git-tracked state.
 8. Новое правило должно быть проверяемым тестом или `make`-gate.
 9. По умолчанию пиши по-русски; English используй только для устойчивых technical terms, имён команд, API и code identifiers.

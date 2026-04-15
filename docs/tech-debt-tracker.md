@@ -1,7 +1,7 @@
 # Реестр техдолга
 
 Владелец: Platform Team
-Проверено: 2026-03-30
+Проверено: 2026-04-14
 
 ## Active
 
@@ -29,10 +29,10 @@
 - Влияние: `internal/provider helper layer` остаётся без `unit coverage`, а `Groq adapter` покрыт в основном только `preflight test`, поэтому drift в `retry/parser/request-shape` может пройти через `make ci`.
 - План: добавить `deterministic unit tests` для `Retry`, `ParseOpenAICompatibleTranscript`, `MarshalRawArray` и `Groq request construction/response parsing`.
 
-### TD-009 CLI и bash completion всё ещё на hand-rolled implementation, а legacy YAML расширяет runtime surface
-- Влияние: текущий `flag`/custom completion слой и поддержка `legacy YAML config` усложняют сопровождение `help`, `subcommands`, `shell completion` и общего `CLI UX contract`, потому что часть поведения и совместимости приходится поддерживать вручную.
-- План: перевести `command tree` и `bash completion` на `cobra`, убрать поддержку `legacy YAML config`, зафиксировать целевой контракт `flags > env > defaults` и добавить `smoke/integration coverage` для `help`, `parse failures` и `completion bash`.
 ## Closed
+
+### TD-009 CLI и bash completion всё ещё на hand-rolled implementation, а legacy YAML расширяет runtime surface
+- Решение: `command tree`, `help` и `bash completion` переведены на `cobra`, `legacy YAML config` удалён, целевой контракт зафиксирован как `flags > env > defaults`, а для `help`, `parse failures` и `completion bash` добавлены `command/integration tests`.
 
 ### TD-003 добавить make targets build/install
 - Решение: добавлены `make build` и `make install`; `install` по умолчанию копирует `./bin/whisper-cli` в `~/.local/bin/whisper-cli`, а `contract` зафиксирован в `README.md` и `docs/MAINTENANCE.md`.

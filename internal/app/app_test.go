@@ -196,12 +196,15 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 		Env:      staticEnv{},
 	}
 
-	err := app.Run(context.Background(), []string{
-		"-input", input,
-		"-output-dir", outputRoot,
-		"-provider", "openai",
-		"-model", "whisper-1",
-		"-outputs", "timestamps,raw",
+	err := app.Run(context.Background(), config.Config{
+		Input:        input,
+		OutputDir:    outputRoot,
+		Provider:     domain.ProviderOpenAI,
+		Model:        "whisper-1",
+		Outputs:      domain.ArtifactSet{domain.ArtifactTimestamps: true, domain.ArtifactRaw: true},
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
 	})
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -310,11 +313,15 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 	}
 
 	outputRoot := filepath.Join(dir, "out")
-	err := app.Run(context.Background(), []string{
-		"-input", input,
-		"-output-dir", outputRoot,
-		"-provider", "openai",
-		"-model", "gpt-4o-transcribe",
+	err := app.Run(context.Background(), config.Config{
+		Input:        input,
+		OutputDir:    outputRoot,
+		Provider:     domain.ProviderOpenAI,
+		Model:        "gpt-4o-transcribe",
+		Outputs:      domain.DefaultArtifacts(),
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -357,11 +364,15 @@ func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 		Env:    config.OSEnv{},
 	}
 
-	err := app.Run(context.Background(), []string{
-		"-input", input,
-		"-provider", "openai",
-		"-model", "gpt-4o-transcribe",
-		"-outputs", "srt",
+	err := app.Run(context.Background(), config.Config{
+		Input:        input,
+		OutputDir:    "output",
+		Provider:     domain.ProviderOpenAI,
+		Model:        "gpt-4o-transcribe",
+		Outputs:      domain.ArtifactSet{domain.ArtifactSRT: true},
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
 	})
 	if err == nil {
 		t.Fatalf("expected error for unsupported srt artifacts")
@@ -400,10 +411,15 @@ func TestApplicationRunRejectsEmptyMediaDirectory(t *testing.T) {
 		Env:    config.OSEnv{},
 	}
 
-	err := app.Run(context.Background(), []string{
-		"-input", inputDir,
-		"-provider", "openai",
-		"-model", "whisper-1",
+	err := app.Run(context.Background(), config.Config{
+		Input:        inputDir,
+		OutputDir:    "output",
+		Provider:     domain.ProviderOpenAI,
+		Model:        "whisper-1",
+		Outputs:      domain.DefaultArtifacts(),
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
 	})
 	if err == nil {
 		t.Fatalf("expected error for empty input directory")

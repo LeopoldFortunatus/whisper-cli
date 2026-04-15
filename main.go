@@ -2,48 +2,19 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 
 	"github.com/arykalin/whisper-cli/internal/app"
-	"github.com/arykalin/whisper-cli/internal/completion"
-	"github.com/arykalin/whisper-cli/internal/config"
-	"github.com/rs/zerolog/log"
+	"github.com/arykalin/whisper-cli/internal/cli"
 )
 
 func main() {
-	if err := run(context.Background(), os.Args[1:], os.Stdout); err != nil {
-		log.Fatal().Err(err).Msg("execution failed")
+	if err := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr, app.NewDefault()); err != nil {
+		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, args []string, stdout io.Writer) error {
-	if handled, err := runCompletion(args, stdout); handled {
-		return err
-	}
-
-	application := app.NewDefault()
-	if err := application.Run(ctx, args); err != nil {
-		var helpErr *config.HelpError
-		if errors.As(err, &helpErr) {
-			_, writeErr := fmt.Fprint(stdout, helpErr.Usage)
-			return writeErr
-		}
-		return err
-	}
-	return nil
-}
-
-func runCompletion(args []string, stdout io.Writer) (bool, error) {
-	if len(args) == 0 || args[0] != "completion" {
-		return false, nil
-	}
-	if len(args) != 2 || args[1] != "bash" {
-		return true, errors.New("usage: whisper-cli completion bash")
-	}
-
-	_, err := io.WriteString(stdout, completion.BashScript())
-	return true, err
+func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer, application *app.Application) error {
+	return cli.Run(ctx, application, args, stdout, stderr)
 }

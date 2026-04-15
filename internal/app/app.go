@@ -52,20 +52,7 @@ func NewDefault() *Application {
 	}
 }
 
-func (a *Application) Run(ctx context.Context, args []string) error {
-	flags, err := config.ParseFlags(args)
-	if err != nil {
-		return err
-	}
-
-	cfg, warnings, err := config.Resolve(flags, a.Env, a.FS)
-	if err != nil {
-		return err
-	}
-	for _, warning := range warnings {
-		a.Logger.Warn().Msg(warning)
-	}
-
+func (a *Application) Run(ctx context.Context, cfg config.Config) error {
 	if err := a.Audio.EnsureBinaries(); err != nil {
 		return err
 	}

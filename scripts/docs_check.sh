@@ -5,7 +5,6 @@ required_files=(
   "AGENTS.md"
   "README.md"
   "Makefile"
-  "config.example.yaml"
   "docs/index.md"
   "docs/ARCHITECTURE.md"
   "docs/MAINTENANCE.md"

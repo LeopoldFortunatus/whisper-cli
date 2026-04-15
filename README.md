@@ -17,10 +17,9 @@ Go CLI для локальной транскрипции медиафайлов
 
 1. `flags`
 2. `WHISPER_CLI_*` в `env`
-3. `config.yaml` как legacy-файл
-4. значения по умолчанию
+3. значения по умолчанию
 
-`config.yaml` не обязателен. Для примера есть [`config.example.yaml`](/home/arykalin/go/src/github.com/arykalin/whisper-cli/config.example.yaml).
+Runtime `YAML`-конфиг больше не поддерживается. CLI использует GNU long flags вроде `--input`, `--provider` и `--output-dir`.
 
 ## Обязательные переменные окружения
 
@@ -83,29 +82,29 @@ make build
 
 ```bash
 OPENAI_API_KEY=... ./bin/whisper-cli \
-  -input /path/to/media.mp4 \
-  -output-dir /tmp/whisper-cli \
-  -provider openai \
-  -model whisper-1
+  --input /path/to/media.mp4 \
+  --output-dir /tmp/whisper-cli \
+  --provider openai \
+  --model whisper-1
 ```
 
 ```bash
 GROQ_API_KEY=... ./bin/whisper-cli \
-  -input /path/to/media-dir \
-  -output-dir /tmp/whisper-cli \
-  -provider groq \
-  -model whisper-large-v3-turbo \
-  -outputs timestamps,raw
+  --input /path/to/media-dir \
+  --output-dir /tmp/whisper-cli \
+  --provider groq \
+  --model whisper-large-v3-turbo \
+  --outputs timestamps,raw
 ```
 
 Для моделей без `segment timestamps` CLI автоматически отключает `timestamps` и оставляет обязательные `transcript.json`/`transcript.txt`. Если нужны только plain output-артефакты без других optional artifacts, можно явно указать:
 
 ```bash
 OPENAI_API_KEY=... ./bin/whisper-cli \
-  -input /path/to/media.ogg \
-  -provider openai \
-  -model gpt-4o-transcribe \
-  -outputs none
+  --input /path/to/media.ogg \
+  --provider openai \
+  --model gpt-4o-transcribe \
+  --outputs none
 ```
 
 CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wav`, `webm` как входные media extensions.
@@ -117,18 +116,17 @@ CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wa
 
 - `completion bash`
 
-- `-config`
-- `-provider`
-- `-model`
-- `-input`
-- `-output-dir`
-- `-language`
-- `-outputs`
-- `-chunk-seconds`
-- `-concurrency`
-- `-prompt`
+- `--provider`
+- `--model`
+- `--input`
+- `--output-dir`
+- `--language`
+- `--outputs`
+- `--chunk-seconds`
+- `--concurrency`
+- `--prompt`
 
-`-outputs` управляет только optional artifacts. `transcript.json` и `transcript.txt` создаются всегда. Если модель не поддерживает `segment timestamps`, `timestamps` автоматически отключаются с warning.
+`--outputs` управляет только optional artifacts. `transcript.json` и `transcript.txt` создаются всегда. Если модель не поддерживает `segment timestamps`, `timestamps` автоматически отключаются с warning.
 
 Поддерживаемые optional outputs:
 
@@ -138,16 +136,6 @@ CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wa
 - `diarized`
 - `raw`
 - `none`
-
-## Совместимость с legacy-конфигом
-
-Legacy-поля `input_file` и `usergpt4` всё ещё поддерживаются в YAML-конфиге:
-
-- `input_file` маппится в `input`
-- `usergpt4=true` маппится в `model=gpt-4o-transcribe`
-- `usergpt4=false` маппится в `model=whisper-1`
-
-При использовании legacy-полей CLI пишет `deprecation warnings`.
 
 ## Матрица provider'ов
 

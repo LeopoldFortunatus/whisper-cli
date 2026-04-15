@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/arykalin/whisper-cli/internal/domain"
 )
@@ -50,6 +51,28 @@ func (r Registry) Provider(name domain.Provider) (Client, error) {
 		return nil, fmt.Errorf("provider %s is not registered", name)
 	}
 	return client, nil
+}
+
+func (r Registry) Clients() []Client {
+	clients := make([]Client, 0, len(r.clients))
+	for _, client := range r.clients {
+		clients = append(clients, client)
+	}
+	slices.SortFunc(clients, func(a, b Client) int {
+		return compareProviderNames(a.Name(), b.Name())
+	})
+	return clients
+}
+
+func compareProviderNames(a domain.Provider, b domain.Provider) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 type blockedClient struct {

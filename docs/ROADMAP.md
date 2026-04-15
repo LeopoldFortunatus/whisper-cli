@@ -1,7 +1,7 @@
 # Дорожная карта
 
 Владелец: Platform Team
-Проверено: 2026-03-27
+Проверено: 2026-04-14
 
 ## Done
 
@@ -37,6 +37,11 @@
 ### RM-011 Bash Completion
 - добавлены `whisper-cli completion bash` и `make install-bash-completion` для предсказуемого Linux install contract
 - `provider`, `outputs` и совместимые `models` теперь подсказываются детерминированно без запуска runtime/preflight path
+
+### TD-009 Cobra CLI Runtime Contract Cleanup
+- `help`, `subcommands` и `bash completion` переведены на `cobra`
+- runtime contract сокращён до `flags > env > defaults`, а `legacy YAML config` удалён
+- публичный CLI использует GNU long flags вроде `--input` и `--provider`
 
 ## In Progress
 

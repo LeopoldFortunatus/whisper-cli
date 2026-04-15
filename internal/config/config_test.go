@@ -1,12 +1,10 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/arykalin/whisper-cli/internal/domain"
-	"github.com/arykalin/whisper-cli/internal/platform/fsx"
 )
 
 type mapEnv map[string]string
@@ -16,32 +14,13 @@ func (m mapEnv) LookupEnv(key string) (string, bool) {
 	return value, ok
 }
 
-func TestResolvePrecedenceFlagsEnvFileDefaults(t *testing.T) {
+func TestResolvePrecedenceFlagsEnvDefaults(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.yaml")
-	content := []byte(`
-provider: openai
-model: whisper-1
-input: yaml-input.m4a
-output_dir: yaml-output
-language: en
-outputs: srt
-chunk_seconds: 111
-concurrency: 2
-prompt: yaml prompt
-`)
-	if err := os.WriteFile(configPath, content, 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	flags := Flags{}
-	flags.ConfigPath.Value = configPath
-	flags.ConfigPath.Provided = true
-	flags.Input.SetValue("flag-input.mp3")
-	flags.OutputDir.SetValue("flag-output")
-	flags.ChunkSeconds.SetValue(333)
+	overrides := Overrides{}
+	overrides.Input.SetValue("flag-input.mp3")
+	overrides.OutputDir.SetValue("flag-output")
+	overrides.ChunkSeconds.SetValue(333)
 
 	env := mapEnv{
 		"WHISPER_CLI_PROVIDER":    "groq",
@@ -52,12 +31,9 @@ prompt: yaml prompt
 		"WHISPER_CLI_PROMPT":      "env prompt",
 	}
 
-	cfg, warnings, err := Resolve(flags, env, fsx.OS{})
+	cfg, err := Resolve(overrides, env)
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
-	}
-	if len(warnings) != 0 {
-		t.Fatalf("expected no warnings, got %v", warnings)
 	}
 
 	if cfg.Provider != domain.ProviderGroq {
@@ -89,38 +65,74 @@ prompt: yaml prompt
 	}
 }
 
-func TestResolveLegacyConfigFields(t *testing.T) {
+func TestResolveUsesDefaultsWithoutEnv(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.yaml")
-	content := []byte(`
-input_file: legacy-input.m4a
-usergpt4: true
-`)
-	if err := os.WriteFile(configPath, content, 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	overrides := Overrides{}
+	overrides.Input.SetValue("input.m4a")
 
-	flags := Flags{}
-	flags.ConfigPath.Value = configPath
-	flags.ConfigPath.Provided = true
-
-	cfg, warnings, err := Resolve(flags, mapEnv{}, fsx.OS{})
+	cfg, err := Resolve(overrides, mapEnv{})
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
 
-	if cfg.Input != "legacy-input.m4a" {
-		t.Fatalf("input = %s", cfg.Input)
-	}
 	if cfg.Provider != domain.ProviderOpenAI {
-		t.Fatalf("provider = %s", cfg.Provider)
+		t.Fatalf("provider = %s, want %s", cfg.Provider, domain.ProviderOpenAI)
 	}
-	if cfg.Model != "gpt-4o-transcribe" {
-		t.Fatalf("model = %s", cfg.Model)
+	if cfg.Model != "whisper-1" {
+		t.Fatalf("model = %s, want whisper-1", cfg.Model)
 	}
-	if len(warnings) != 2 {
-		t.Fatalf("warnings = %v, want 2 warnings", warnings)
+	if cfg.OutputDir != "output" {
+		t.Fatalf("outputDir = %s, want output", cfg.OutputDir)
+	}
+	if cfg.Language != "ru" {
+		t.Fatalf("language = %s, want ru", cfg.Language)
+	}
+	if !cfg.Outputs.Enabled(domain.ArtifactTimestamps) {
+		t.Fatalf("outputs = %#v, want timestamps enabled", cfg.Outputs)
+	}
+}
+
+func TestResolveUsesProviderSpecificDefaultModel(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Resolve(Overrides{}, mapEnv{
+		"WHISPER_CLI_INPUT":    "input.m4a",
+		"WHISPER_CLI_PROVIDER": "groq",
+	})
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+
+	if cfg.Model != "whisper-large-v3-turbo" {
+		t.Fatalf("model = %s, want whisper-large-v3-turbo", cfg.Model)
+	}
+}
+
+func TestResolveRejectsMissingInput(t *testing.T) {
+	t.Parallel()
+
+	_, err := Resolve(Overrides{}, mapEnv{})
+	if err == nil {
+		t.Fatal("expected missing input error")
+	}
+	if !strings.Contains(err.Error(), "--input") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestResolveRejectsInvalidChunkSeconds(t *testing.T) {
+	t.Parallel()
+
+	overrides := Overrides{}
+	overrides.Input.SetValue("input.m4a")
+	overrides.ChunkSeconds.SetValue(0)
+
+	_, err := Resolve(overrides, mapEnv{})
+	if err == nil {
+		t.Fatal("expected invalid chunk-seconds error")
+	}
+	if !strings.Contains(err.Error(), "chunk-seconds") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
