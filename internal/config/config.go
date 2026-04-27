@@ -180,6 +180,6 @@ func defaultModelForProvider(providerName string) string {
 	case domain.ProviderGroq:
 		return "whisper-large-v3-turbo"
 	default:
-		return "whisper-1"
+		return "gpt-4o-transcribe"
 	}
 }
