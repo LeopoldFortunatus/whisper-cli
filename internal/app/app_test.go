@@ -341,6 +341,146 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 	}
 }
 
+func TestApplicationRunDefaultsDiarizedArtifactForDiarizeModel(t *testing.T) {
+	t.Parallel()
+
+	logger := zerolog.New(io.Discard)
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input.m4a")
+	if err := os.WriteFile(input, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+
+	audioPipeline := &fakeAudioPipeline{
+		chunks: []audio.Chunk{
+			{Number: 0, Path: "chunk-0", Offset: 0},
+		},
+	}
+	app := &Application{
+		FS:    fsx.OS{},
+		Audio: audioPipeline,
+		Registry: provider.NewRegistry(fakeProvider{
+			name: domain.ProviderOpenAI,
+			capabilities: map[string]domain.Capabilities{
+				"gpt-4o-transcribe-diarize": {
+					SupportsDiarization: true,
+				},
+			},
+			responses: map[string]provider.Response{
+				"chunk-0": {
+					Transcript: domain.Transcript{
+						Text: "speaker transcript",
+						SpeakerSegments: []domain.SpeakerSegment{
+							{Start: 0, End: 1, Speaker: "speaker_0", Text: "speaker transcript"},
+						},
+					},
+				},
+			},
+		}),
+		Logger: logger,
+		Env:    config.OSEnv{},
+	}
+
+	outputRoot := filepath.Join(dir, "out")
+	err := app.Run(context.Background(), config.Config{
+		Input:        input,
+		OutputDir:    outputRoot,
+		Provider:     domain.ProviderOpenAI,
+		Model:        "gpt-4o-transcribe-diarize",
+		Outputs:      domain.DefaultArtifacts(),
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	outDir := filepath.Join(outputRoot, "input")
+	if _, err := os.Stat(filepath.Join(outDir, "timestamps.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected timestamps.txt to be skipped, stat err = %v", err)
+	}
+	diarized, err := os.ReadFile(filepath.Join(outDir, "diarized.json"))
+	if err != nil {
+		t.Fatalf("read diarized.json: %v", err)
+	}
+	if !strings.Contains(string(diarized), "speaker_0") {
+		t.Fatalf("diarized.json did not contain speaker segment: %s", string(diarized))
+	}
+}
+
+func TestNormalizeConfigRespectsExplicitOutputsForDiarizeModel(t *testing.T) {
+	t.Parallel()
+
+	logger := zerolog.New(io.Discard)
+	client := fakeProvider{
+		name: domain.ProviderOpenAI,
+		capabilities: map[string]domain.Capabilities{
+			"gpt-4o-transcribe-diarize": {
+				SupportsDiarization: true,
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		outputs string
+		want    domain.ArtifactKind
+	}{
+		{
+			name:    "env none",
+			outputs: "none",
+		},
+		{
+			name:    "flag raw",
+			outputs: "raw",
+			want:    domain.ArtifactRaw,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			overrides := config.Overrides{}
+			overrides.Input.SetValue("input.m4a")
+			if tt.name == "flag raw" {
+				overrides.Outputs.SetValue(tt.outputs)
+			}
+			env := mapEnvForApp(tt.name, tt.outputs)
+			cfg, err := config.Resolve(overrides, env)
+			if err != nil {
+				t.Fatalf("Resolve returned error: %v", err)
+			}
+			cfg.Model = "gpt-4o-transcribe-diarize"
+
+			got, err := normalizeConfigAgainstCapabilities(client, cfg, logger)
+			if err != nil {
+				t.Fatalf("normalizeConfigAgainstCapabilities returned error: %v", err)
+			}
+			if got.Outputs.Enabled(domain.ArtifactDiarized) {
+				t.Fatalf("outputs = %#v, did not want auto diarized for explicit outputs", got.Outputs)
+			}
+			if tt.want != "" && !got.Outputs.Enabled(tt.want) {
+				t.Fatalf("outputs = %#v, want %s enabled", got.Outputs, tt.want)
+			}
+			if tt.want == "" && len(got.Outputs.Sorted()) != 0 {
+				t.Fatalf("outputs = %#v, want none", got.Outputs)
+			}
+		})
+	}
+}
+
+func mapEnvForApp(name string, outputs string) config.EnvSource {
+	if name == "env none" {
+		return staticEnv{
+			"WHISPER_CLI_INPUT":   "input.m4a",
+			"WHISPER_CLI_OUTPUTS": outputs,
+		}
+	}
+	return staticEnv{}
+}
+
 func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 	t.Parallel()
 

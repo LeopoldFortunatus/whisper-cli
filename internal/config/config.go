@@ -76,15 +76,16 @@ type Overrides struct {
 }
 
 type Config struct {
-	Provider     domain.Provider
-	Model        string
-	Input        string
-	OutputDir    string
-	Language     string
-	Outputs      domain.ArtifactSet
-	ChunkSeconds int
-	Concurrency  int
-	Prompt       string
+	Provider        domain.Provider
+	Model           string
+	Input           string
+	OutputDir       string
+	Language        string
+	Outputs         domain.ArtifactSet
+	OutputsExplicit bool
+	ChunkSeconds    int
+	Concurrency     int
+	Prompt          string
 }
 
 type EnvSource interface {
@@ -112,7 +113,7 @@ func Resolve(overrides Overrides, env EnvSource) (Config, error) {
 
 	outputDir := chooseString(overrides.OutputDir, env, "WHISPER_CLI_OUTPUT_DIR", "output")
 	language := chooseString(overrides.Language, env, "WHISPER_CLI_LANGUAGE", "ru")
-	outputsRaw := chooseString(overrides.Outputs, env, "WHISPER_CLI_OUTPUTS", "timestamps")
+	outputsRaw, outputsExplicit := chooseStringWithExplicit(overrides.Outputs, env, "WHISPER_CLI_OUTPUTS", "timestamps")
 	chunkSeconds := chooseInt(overrides.ChunkSeconds, env, "WHISPER_CLI_CHUNK_SECONDS", 600)
 	concurrency := chooseInt(overrides.Concurrency, env, "WHISPER_CLI_CONCURRENCY", runtime.NumCPU())
 	prompt := chooseString(overrides.Prompt, env, "WHISPER_CLI_PROMPT", "")
@@ -140,26 +141,32 @@ func Resolve(overrides Overrides, env EnvSource) (Config, error) {
 	}
 
 	return Config{
-		Provider:     providerValue,
-		Model:        strings.TrimSpace(model),
-		Input:        strings.TrimSpace(input),
-		OutputDir:    strings.TrimSpace(outputDir),
-		Language:     strings.TrimSpace(language),
-		Outputs:      outputs,
-		ChunkSeconds: chunkSeconds,
-		Concurrency:  concurrency,
-		Prompt:       strings.TrimSpace(prompt),
+		Provider:        providerValue,
+		Model:           strings.TrimSpace(model),
+		Input:           strings.TrimSpace(input),
+		OutputDir:       strings.TrimSpace(outputDir),
+		Language:        strings.TrimSpace(language),
+		Outputs:         outputs,
+		OutputsExplicit: outputsExplicit,
+		ChunkSeconds:    chunkSeconds,
+		Concurrency:     concurrency,
+		Prompt:          strings.TrimSpace(prompt),
 	}, nil
 }
 
 func chooseString(override StringOverride, env EnvSource, envKey string, fallback string) string {
+	value, _ := chooseStringWithExplicit(override, env, envKey, fallback)
+	return value
+}
+
+func chooseStringWithExplicit(override StringOverride, env EnvSource, envKey string, fallback string) (string, bool) {
 	if override.Provided {
-		return strings.TrimSpace(override.Value)
+		return strings.TrimSpace(override.Value), true
 	}
 	if value, ok := env.LookupEnv(envKey); ok && strings.TrimSpace(value) != "" {
-		return strings.TrimSpace(value)
+		return strings.TrimSpace(value), true
 	}
-	return fallback
+	return fallback, false
 }
 
 func chooseInt(override IntOverride, env EnvSource, envKey string, fallback int) int {

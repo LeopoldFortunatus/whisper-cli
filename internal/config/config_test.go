@@ -54,6 +54,9 @@ func TestResolvePrecedenceFlagsEnvDefaults(t *testing.T) {
 	if !cfg.Outputs.Enabled(domain.ArtifactVTT) || !cfg.Outputs.Enabled(domain.ArtifactRaw) {
 		t.Fatalf("outputs = %#v", cfg.Outputs)
 	}
+	if !cfg.OutputsExplicit {
+		t.Fatal("outputsExplicit = false, want true for env outputs")
+	}
 	if cfg.ChunkSeconds != 333 {
 		t.Fatalf("chunkSeconds = %d", cfg.ChunkSeconds)
 	}
@@ -90,6 +93,29 @@ func TestResolveUsesDefaultsWithoutEnv(t *testing.T) {
 	}
 	if !cfg.Outputs.Enabled(domain.ArtifactTimestamps) {
 		t.Fatalf("outputs = %#v, want timestamps enabled", cfg.Outputs)
+	}
+	if cfg.OutputsExplicit {
+		t.Fatal("outputsExplicit = true, want false for default outputs")
+	}
+}
+
+func TestResolveMarksFlagOutputsExplicit(t *testing.T) {
+	t.Parallel()
+
+	overrides := Overrides{}
+	overrides.Input.SetValue("input.m4a")
+	overrides.Outputs.SetValue("none")
+
+	cfg, err := Resolve(overrides, mapEnv{})
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+
+	if len(cfg.Outputs) != 0 {
+		t.Fatalf("outputs = %#v, want none", cfg.Outputs)
+	}
+	if !cfg.OutputsExplicit {
+		t.Fatal("outputsExplicit = false, want true for flag outputs")
 	}
 }
 

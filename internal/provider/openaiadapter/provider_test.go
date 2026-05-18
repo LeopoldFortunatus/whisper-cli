@@ -101,10 +101,9 @@ func TestProviderUsesDiarizedRequestShape(t *testing.T) {
 	providerClient := newWithRequester("test-key", fsx.OS{}, zerolog.New(io.Discard), requester)
 
 	response, err := providerClient.Transcribe(context.Background(), provider.Request{
-		FilePath:        audioPath,
-		Model:           diarizeModel,
-		Language:        "ru",
-		WantDiarization: true,
+		FilePath: audioPath,
+		Model:    diarizeModel,
+		Language: "ru",
 	})
 	if err != nil {
 		t.Fatalf("Transcribe returned error: %v", err)

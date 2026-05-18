@@ -132,6 +132,12 @@ func normalizeConfigAgainstCapabilities(client provider.Client, cfg config.Confi
 	if cfg.Outputs.Enabled(domain.ArtifactDiarized) && !caps.SupportsDiarization {
 		return config.Config{}, fmt.Errorf("model %s does not support diarization", cfg.Model)
 	}
+	if caps.SupportsDiarization && !cfg.OutputsExplicit && len(cfg.Outputs.Sorted()) == 0 {
+		if cfg.Outputs == nil {
+			cfg.Outputs = domain.ArtifactSet{}
+		}
+		cfg.Outputs[domain.ArtifactDiarized] = true
+	}
 
 	return cfg, nil
 }

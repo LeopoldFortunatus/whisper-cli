@@ -117,7 +117,7 @@ func (p *Provider) Transcribe(ctx context.Context, req provider.Request) (provid
 			params.Prompt = param.NewOpt(req.Prompt)
 		}
 
-		if req.WantDiarization {
+		if caps.SupportsDiarization {
 			params.ResponseFormat = openai.AudioResponseFormat("diarized_json")
 			params.ChunkingStrategy = openai.AudioTranscriptionNewParamsChunkingStrategyUnion{
 				OfAuto: constant.ValueOf[constant.Auto](),

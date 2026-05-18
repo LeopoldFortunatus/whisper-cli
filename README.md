@@ -99,7 +99,7 @@ GROQ_API_KEY=... ./bin/whisper-cli \
   --outputs timestamps,raw
 ```
 
-Для моделей без `segment timestamps` CLI автоматически отключает `timestamps` и оставляет обязательные `transcript.json`/`transcript.txt`. Если нужны только plain output-артефакты без других optional artifacts, можно явно указать:
+Для моделей без `segment timestamps` CLI автоматически отключает `timestamps`. Для `gpt-4o-transcribe-diarize` это означает, что запуск без явного `--outputs` пишет `diarized.json` вместе с обязательными `transcript.json`/`transcript.txt`. Если нужны только plain output-артефакты без других optional artifacts, можно явно указать:
 
 ```bash
 OPENAI_API_KEY=... ./bin/whisper-cli \
@@ -129,6 +129,7 @@ CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wa
 - `--prompt`
 
 `--outputs` управляет только optional artifacts. `transcript.json` и `transcript.txt` создаются всегда. Если модель не поддерживает `segment timestamps`, `timestamps` автоматически отключаются с warning.
+Для `gpt-4o-transcribe-diarize` default `outputs=timestamps` после такого отключения заменяется на `diarized`, поэтому по умолчанию создаётся `diarized.json`. Явные `--outputs none`, `--outputs raw` или `WHISPER_CLI_OUTPUTS=...` уважаются без auto-добавления `diarized`.
 
 Поддерживаемые optional outputs:
 
