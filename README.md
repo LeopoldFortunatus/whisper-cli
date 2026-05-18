@@ -21,6 +21,8 @@ Go CLI для локальной транскрипции медиафайлов
 
 Runtime `YAML`-конфиг больше не поддерживается. CLI использует GNU long flags вроде `--input`, `--provider` и `--output-dir`.
 
+Если `--provider` и `--model` не заданы, CLI по умолчанию использует `provider=openai` и модель `gpt-4o-transcribe`.
+
 ## Обязательные переменные окружения
 
 - `OPENAI_API_KEY` для `provider=openai`

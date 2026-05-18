@@ -79,8 +79,8 @@ func TestResolveUsesDefaultsWithoutEnv(t *testing.T) {
 	if cfg.Provider != domain.ProviderOpenAI {
 		t.Fatalf("provider = %s, want %s", cfg.Provider, domain.ProviderOpenAI)
 	}
-	if cfg.Model != "whisper-1" {
-		t.Fatalf("model = %s, want whisper-1", cfg.Model)
+	if cfg.Model != "gpt-4o-transcribe" {
+		t.Fatalf("model = %s, want gpt-4o-transcribe", cfg.Model)
 	}
 	if cfg.OutputDir != "output" {
 		t.Fatalf("outputDir = %s, want output", cfg.OutputDir)

@@ -5,6 +5,10 @@
 
 ## Active
 
+### TD-011 Невалидные числовые env overrides молча заменяются defaults
+- Влияние: `WHISPER_CLI_CHUNK_SECONDS=abc` или `WHISPER_CLI_CONCURRENCY=abc` не дают ошибку конфигурации, а запускают CLI с default value; это скрывает misconfiguration и может менять стоимость/время транскрипции без явного сигнала пользователю.
+- План: сделать `chooseInt` error-returning path для env values, добавить unit tests на invalid env integers и сохранить текущее поведение для отсутствующих env variables.
+
 ### TD-001 Контракт транскрипции OpenRouter остаётся неясным
 - Влияние: нельзя безопасно объявить OpenRouter как поддерживаемый `transcription provider` без drift относительно `official API surface`.
 - План: при возврате к `slice` `RM-008` повторно проверить `official docs/OpenAPI` и либо реализовать `adapter`, либо явно оставить `provider` заблокированным.
@@ -30,6 +34,9 @@
 - План: добавить `deterministic unit tests` для `Retry`, `ParseOpenAICompatibleTranscript`, `MarshalRawArray` и `Groq request construction/response parsing`.
 
 ## Closed
+
+### TD-010 Локальный `make ci` сломан устаревшим default-model тестом
+- Решение: `TestResolveUsesDefaultsWithoutEnv` обновлён под актуальный OpenAI default `gpt-4o-transcribe`, а пользовательская документация явно фиксирует default `provider=openai` и `model=gpt-4o-transcribe`.
 
 ### TD-009 CLI и bash completion всё ещё на hand-rolled implementation, а legacy YAML расширяет runtime surface
 - Решение: `command tree`, `help` и `bash completion` переведены на `cobra`, `legacy YAML config` удалён, целевой контракт зафиксирован как `flags > env > defaults`, а для `help`, `parse failures` и `completion bash` добавлены `command/integration tests`.
