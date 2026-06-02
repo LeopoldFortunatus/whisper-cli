@@ -46,6 +46,15 @@ func testApplication() *app.Application {
 	}
 }
 
+type countingResolver struct {
+	calls int
+}
+
+func (c *countingResolver) Resolve(context.Context) (string, error) {
+	c.calls++
+	return "openai-key", nil
+}
+
 func TestRunPrintsHelpWithoutError(t *testing.T) {
 	t.Parallel()
 
@@ -71,6 +80,28 @@ func TestRunPrintsHelpWithoutError(t *testing.T) {
 	}
 }
 
+func TestRunHelpDoesNotResolveOpenAIKey(t *testing.T) {
+	t.Parallel()
+
+	resolver := &countingResolver{}
+	application := testApplication()
+	application.OpenAIKeyResolver = resolver
+	application.OpenAIProviderFactory = func(apiKey string) provider.Client {
+		t.Fatalf("unexpected OpenAI provider factory call with %q", apiKey)
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := Run(context.Background(), application, []string{"--help"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if resolver.calls != 0 {
+		t.Fatalf("resolver calls = %d, want 0", resolver.calls)
+	}
+}
+
 func TestRunPrintsBashCompletionWithoutError(t *testing.T) {
 	t.Parallel()
 
@@ -90,6 +121,28 @@ func TestRunPrintsBashCompletionWithoutError(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunBashCompletionDoesNotResolveOpenAIKey(t *testing.T) {
+	t.Parallel()
+
+	resolver := &countingResolver{}
+	application := testApplication()
+	application.OpenAIKeyResolver = resolver
+	application.OpenAIProviderFactory = func(apiKey string) provider.Client {
+		t.Fatalf("unexpected OpenAI provider factory call with %q", apiKey)
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := Run(context.Background(), application, []string{"completion", "bash"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if resolver.calls != 0 {
+		t.Fatalf("resolver calls = %d, want 0", resolver.calls)
 	}
 }
 

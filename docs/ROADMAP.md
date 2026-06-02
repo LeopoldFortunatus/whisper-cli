@@ -1,7 +1,7 @@
 # Дорожная карта
 
 Владелец: Platform Team
-Проверено: 2026-04-14
+Проверено: 2026-06-02
 
 ## Done
 
@@ -43,15 +43,20 @@
 - runtime contract сокращён до `flags > env > defaults`, а `legacy YAML config` удалён
 - публичный CLI использует GNU long flags вроде `--input` и `--provider`
 
+### RM-010 Secure OpenAI API Key Resolution
+- OpenAI API key в Linux runtime резолвится через Secret Service (`secret-tool lookup application whisper-cli provider openai kind api-key`)
+- `OPENAI_API_KEY` сохранён как fallback для CI и opt-in live smoke tests
+- `app.NewDefault()` больше не читает OpenAI secret, а `--help` и `completion bash` остаются без secret lookup, `ffmpeg` и provider preflight
+
 ## In Progress
 
 - нет
 
 ## Planned
 
-### RM-010 Secure Linux API Key Resolution
-- определить безопасный `runtime contract` для чтения API keys в Linux, включая допустимые источники секретов и их приоритет
-- решить, как и откуда CLI должен получать ключи без утечки в shell history, `process list`, world-readable config files или `git-tracked state`
+### RM-012 Secure Groq API Key Resolution
+- определить безопасный runtime contract для `GROQ_API_KEY`
+- решить, должен ли Groq повторить Secret Service priority order или получить отдельный provider-specific contract
 
 ## Blocked
 

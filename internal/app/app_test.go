@@ -93,6 +93,8 @@ type fakeProvider struct {
 	name         domain.Provider
 	capabilities map[string]domain.Capabilities
 	responses    map[string]provider.Response
+	preflightErr error
+	onPreflight  func()
 }
 
 func (f fakeProvider) Name() domain.Provider {
@@ -100,7 +102,10 @@ func (f fakeProvider) Name() domain.Provider {
 }
 
 func (f fakeProvider) Preflight() error {
-	return nil
+	if f.onPreflight != nil {
+		f.onPreflight()
+	}
+	return f.preflightErr
 }
 
 func (f fakeProvider) Capabilities(model string) (domain.Capabilities, bool) {
@@ -130,6 +135,99 @@ type staticEnv map[string]string
 func (s staticEnv) LookupEnv(key string) (string, bool) {
 	value, ok := s[key]
 	return value, ok
+}
+
+type fakeKeyResolver struct {
+	key       string
+	err       error
+	onResolve func()
+}
+
+func (f fakeKeyResolver) Resolve(context.Context) (string, error) {
+	if f.onResolve != nil {
+		f.onResolve()
+	}
+	return f.key, f.err
+}
+
+func TestApplicationRunResolvesOpenAIKeyBeforeProviderPreflight(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	app := &Application{
+		FS:       fsx.OS{},
+		Audio:    &fakeAudioPipeline{},
+		Registry: provider.NewRegistry(fakeProvider{name: domain.ProviderOpenAI}),
+		Logger:   zerolog.New(io.Discard),
+		Env:      staticEnv{},
+		OpenAIKeyResolver: fakeKeyResolver{
+			key: "resolved-key",
+			onResolve: func() {
+				order = append(order, "resolve")
+			},
+		},
+		OpenAIProviderFactory: func(apiKey string) provider.Client {
+			if apiKey != "resolved-key" {
+				t.Fatalf("apiKey = %q, want resolved-key", apiKey)
+			}
+			order = append(order, "factory")
+			return fakeProvider{
+				name:         domain.ProviderOpenAI,
+				preflightErr: errors.New("stop after preflight"),
+				onPreflight: func() {
+					order = append(order, "preflight")
+				},
+			}
+		},
+	}
+
+	err := app.Run(context.Background(), config.Config{
+		Provider: domain.ProviderOpenAI,
+		Model:    "whisper-1",
+	})
+	if err == nil {
+		t.Fatal("expected preflight error")
+	}
+	if strings.Join(order, ",") != "resolve,factory,preflight" {
+		t.Fatalf("order = %v, want resolve,factory,preflight", order)
+	}
+}
+
+func TestApplicationRunKeepsGroqOnRegisteredProviderPath(t *testing.T) {
+	t.Parallel()
+
+	var resolverCalls int
+	app := &Application{
+		FS:    fsx.OS{},
+		Audio: &fakeAudioPipeline{},
+		Registry: provider.NewRegistry(fakeProvider{
+			name:         domain.ProviderGroq,
+			preflightErr: errors.New("groq preflight"),
+		}),
+		Logger: zerolog.New(io.Discard),
+		Env:    staticEnv{},
+		OpenAIKeyResolver: fakeKeyResolver{
+			key: "openai-key",
+			onResolve: func() {
+				resolverCalls++
+			},
+		},
+		OpenAIProviderFactory: func(apiKey string) provider.Client {
+			t.Fatalf("unexpected OpenAI provider factory call with %q", apiKey)
+			return nil
+		},
+	}
+
+	err := app.Run(context.Background(), config.Config{
+		Provider: domain.ProviderGroq,
+		Model:    "whisper-large-v3-turbo",
+	})
+	if err == nil {
+		t.Fatal("expected groq preflight error")
+	}
+	if resolverCalls != 0 {
+		t.Fatalf("resolver calls = %d, want 0", resolverCalls)
+	}
 }
 
 func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {

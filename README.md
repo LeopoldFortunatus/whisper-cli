@@ -23,23 +23,31 @@ Runtime `YAML`-конфиг больше не поддерживается. CLI 
 
 Если `--provider` и `--model` не заданы, CLI по умолчанию использует `provider=openai` и модель `gpt-4o-transcribe`.
 
-## Обязательные переменные окружения
+## API keys
 
-- `OPENAI_API_KEY` для `provider=openai`
-- `GROQ_API_KEY` для `provider=groq`
+Для `provider=openai` основной Linux contract - Secret Service через `secret-tool`.
 
-Важно: переменная должна быть экспортирована в окружение процесса. Команда `echo $OPENAI_API_KEY` сама по себе не доказывает это: shell-переменная видна `echo`, но дочерние процессы её не унаследуют без `export`.
-
-```bash
-export OPENAI_API_KEY=...
-./bin/whisper-cli -h
-```
-
-Одноразовый вариант без `export`:
+Сохранить ключ:
 
 ```bash
-OPENAI_API_KEY=... ./bin/whisper-cli -h
+secret-tool store --label='whisper-cli OpenAI API key' application whisper-cli provider openai kind api-key
 ```
+
+Проверить запись напрямую через Secret Service. Команда печатает ключ в `stdout`, `whisper-cli` при этом не запускается:
+
+```bash
+secret-tool lookup application whisper-cli provider openai kind api-key
+```
+
+Удалить ключ:
+
+```bash
+secret-tool clear application whisper-cli provider openai kind api-key
+```
+
+Если Secret Service недоступен или запись не найдена, CLI использует `OPENAI_API_KEY` как fallback. Этот fallback предназначен для CI и opt-in live smoke tests. Переменная должна быть экспортирована в окружение процесса: `echo $OPENAI_API_KEY` сам по себе не доказывает, что дочерний процесс её унаследует.
+
+Для `provider=groq` текущий contract остаётся env-only: `GROQ_API_KEY`.
 
 ## Сборка и установка
 
@@ -83,7 +91,7 @@ make build
 ```
 
 ```bash
-OPENAI_API_KEY=... ./bin/whisper-cli \
+./bin/whisper-cli \
   --input /path/to/media.mp4 \
   --output-dir /tmp/whisper-cli \
   --provider openai \
@@ -102,7 +110,7 @@ GROQ_API_KEY=... ./bin/whisper-cli \
 Для моделей без `segment timestamps` CLI автоматически отключает `timestamps`. Для `gpt-4o-transcribe-diarize` это означает, что запуск без явного `--outputs` пишет `diarized.json` вместе с обязательными `transcript.json`/`transcript.txt`. Если нужны только plain output-артефакты без других optional artifacts, можно явно указать:
 
 ```bash
-OPENAI_API_KEY=... ./bin/whisper-cli \
+./bin/whisper-cli \
   --input /path/to/media.ogg \
   --provider openai \
   --model gpt-4o-transcribe \

@@ -13,6 +13,7 @@ import (
 
 	"github.com/arykalin/whisper-cli/internal/audio"
 	"github.com/arykalin/whisper-cli/internal/config"
+	"github.com/arykalin/whisper-cli/internal/credentials"
 	"github.com/arykalin/whisper-cli/internal/domain"
 	"github.com/arykalin/whisper-cli/internal/output"
 	"github.com/arykalin/whisper-cli/internal/platform/execx"
@@ -29,6 +30,13 @@ type Application struct {
 	Registry provider.Registry
 	Logger   zerolog.Logger
 	Env      config.EnvSource
+
+	OpenAIKeyResolver     keyResolver
+	OpenAIProviderFactory func(apiKey string) provider.Client
+}
+
+type keyResolver interface {
+	Resolve(ctx context.Context) (string, error)
 }
 
 func NewDefault() *Application {
@@ -43,25 +51,28 @@ func NewDefault() *Application {
 		FS:    filesystem,
 		Audio: audioService,
 		Registry: provider.NewRegistry(
-			openaiadapter.New(strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), filesystem, logger),
+			openaiadapter.New("", filesystem, logger),
 			groqadapter.New(strings.TrimSpace(os.Getenv("GROQ_API_KEY")), filesystem, logger),
 			provider.NewBlockedClient(domain.ProviderOpenRouter, provider.ErrOpenRouterPlanned),
 		),
-		Logger: logger,
-		Env:    config.OSEnv{},
+		Logger:            logger,
+		Env:               config.OSEnv{},
+		OpenAIKeyResolver: credentials.NewOpenAIKeyResolver(config.OSEnv{}),
+		OpenAIProviderFactory: func(apiKey string) provider.Client {
+			return openaiadapter.New(apiKey, filesystem, logger)
+		},
 	}
 }
 
 func (a *Application) Run(ctx context.Context, cfg config.Config) error {
-	if err := a.Audio.EnsureBinaries(); err != nil {
-		return err
-	}
-
-	client, err := a.Registry.Provider(cfg.Provider)
+	client, err := a.providerForRun(ctx, cfg.Provider)
 	if err != nil {
 		return err
 	}
 	if err := client.Preflight(); err != nil {
+		return err
+	}
+	if err := a.Audio.EnsureBinaries(); err != nil {
 		return err
 	}
 	cfg, err = normalizeConfigAgainstCapabilities(client, cfg, a.Logger)
@@ -105,6 +116,25 @@ func (a *Application) Run(ctx context.Context, cfg config.Config) error {
 	}
 
 	return a.processFile(ctx, client, cfg, inputPath, outputRoot)
+}
+
+func (a *Application) providerForRun(ctx context.Context, providerName domain.Provider) (provider.Client, error) {
+	client, err := a.Registry.Provider(providerName)
+	if err != nil {
+		return nil, err
+	}
+	if providerName != domain.ProviderOpenAI {
+		return client, nil
+	}
+	if a.OpenAIKeyResolver == nil || a.OpenAIProviderFactory == nil {
+		return client, nil
+	}
+
+	apiKey, err := a.OpenAIKeyResolver.Resolve(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return a.OpenAIProviderFactory(apiKey), nil
 }
 
 func normalizeConfigAgainstCapabilities(client provider.Client, cfg config.Config, logger zerolog.Logger) (config.Config, error) {

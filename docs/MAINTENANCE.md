@@ -1,7 +1,7 @@
 # Эксплуатация
 
 Владелец: Platform Team
-Проверено: 2026-04-14
+Проверено: 2026-06-02
 
 ## Локальный build contract
 
@@ -12,6 +12,9 @@
 - для проверки completion install без записи в домашний каталог можно переопределить `BASH_COMPLETION_DIR`, например `make install-bash-completion BASH_COMPLETION_DIR=/tmp/whisper-cli-completion`
 - разовый вариант без install target: `source <(./bin/whisper-cli completion bash)`
 - runtime config резолвится только через `flags > env > defaults`; `config.yaml` больше не участвует в CLI contract
+- OpenAI API key в обычном Linux runtime резолвится через Secret Service: `secret-tool lookup application whisper-cli provider openai kind api-key`
+- `OPENAI_API_KEY` остаётся fallback для CI и opt-in live smoke tests, если Secret Service недоступен или запись не найдена
+- `whisper-cli --help` и `whisper-cli completion bash` не требуют `API key`, `secret-tool`, `ffmpeg` или provider preflight
 
 ## Локальный quality loop
 
@@ -35,11 +38,11 @@
 
 Требования:
 
-- для OpenAI: `OPENAI_API_KEY`
+- для OpenAI: Secret Service или fallback `OPENAI_API_KEY`
 - для Groq: `GROQ_API_KEY`
 - `LIVE_AUDIO_FILE` должен указывать на локальный аудиофайл
 
-Ключи должны быть экспортированы в окружение дочернего процесса. `echo $OPENAI_API_KEY` может печатать shell-переменную, которая не видна `whisper-cli`, если не выполнен `export`.
+Для env fallback ключи должны быть экспортированы в окружение дочернего процесса. `echo $OPENAI_API_KEY` может печатать shell-переменную, которая не видна `whisper-cli`, если не выполнен `export`.
 
 ## Критерии готовности
 

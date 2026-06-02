@@ -67,7 +67,7 @@ func (p *Provider) Name() domain.Provider {
 
 func (p *Provider) Preflight() error {
 	if p.apiKey == "" {
-		return errors.New("OPENAI_API_KEY is not set in process environment; run `export OPENAI_API_KEY=...` or prefix the command with `OPENAI_API_KEY=...`")
+		return errors.New("OpenAI API key is not configured; resolve credentials before creating OpenAI provider")
 	}
 	return nil
 }
