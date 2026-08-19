@@ -1,9 +1,13 @@
 # Реестр техдолга
 
 Владелец: Platform Team
-Проверено: 2026-04-14
+Проверено: 2026-06-05
 
 ## Active
+
+### TD-012 Локальный `make ci` зависит от непиннутого Go/golangci-lint toolchain
+- Влияние: официальный локальный `quality gate` не воспроизводится из обычного окружения: ambient `go` сейчас `go1.23.3` при `go.mod` `go 1.24.2`, а при явном `GOROOT=/home/arykalin/go/go1.26.3` установленный `golangci-lint` built with `go1.24.4` паникует на `file requires newer Go version go1.26`; это скрывает реальные lint-регрессии и делает `make ci` красным по причине окружения, а не кода.
+- План: закрепить repo-local способ запуска совместимых `go` и `golangci-lint` versions, добавить понятный preflight/version guard в `make lint` или docs, и обновить локальную установку `golangci-lint` так, чтобы `make ci` снова был единственным воспроизводимым gate.
 
 ### TD-011 Невалидные числовые env overrides молча заменяются defaults
 - Влияние: `WHISPER_CLI_CHUNK_SECONDS=abc` или `WHISPER_CLI_CONCURRENCY=abc` не дают ошибку конфигурации, а запускают CLI с default value; это скрывает misconfiguration и может менять стоимость/время транскрипции без явного сигнала пользователю.
