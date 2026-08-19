@@ -1,7 +1,7 @@
 # Дорожная карта
 
 Владелец: Platform Team
-Проверено: 2026-06-02
+Проверено: 2026-08-19
 
 ## Done
 
@@ -32,7 +32,7 @@
 
 ### RM-009 Auto-Convert Common Audio And Video Formats To M4A
 - поддерживаемые non-`m4a` аудио- и видеоформаты автоматически нормализуются в `m4a` через явный `preprocessing step`
-- промежуточные `source/chunk` артефакты вынесены в `<output>/<base>/_work/`, а `provider adapters` остались без скрытой orchestration-логики
+- введён явный work layout для `source/chunk`; в RM-013 он перенесён из public output tree в системный cache
 
 ### RM-011 Bash Completion
 - добавлены `whisper-cli completion bash` и `make install-bash-completion` для предсказуемого Linux install contract
@@ -47,6 +47,11 @@
 - OpenAI API key в Linux runtime резолвится через Secret Service (`secret-tool lookup application whisper-cli provider openai kind api-key`)
 - `OPENAI_API_KEY` сохранён как fallback для CI и opt-in live smoke tests
 - `app.NewDefault()` больше не читает OpenAI secret, а `--help` и `completion bash` остаются без secret lookup, `ffmpeg` и provider preflight
+
+### RM-013 Cache-First Multi-Input Output
+- `whisper-cli --input *.m4a` принимает shell-expanded ordered batch и обрабатывает files последовательно
+- default public output сокращён до `<source-stem>.txt`, а canonical JSON и work artifacts перенесены в системный cache
+- public output collisions проверяются до transcription requests
 
 ## In Progress
 

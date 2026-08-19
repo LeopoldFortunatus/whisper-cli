@@ -3,17 +3,24 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/arykalin/whisper-cli/internal/app"
+	"github.com/arykalin/whisper-cli/internal/audio"
 	"github.com/arykalin/whisper-cli/internal/domain"
+	"github.com/arykalin/whisper-cli/internal/platform/fsx"
 	"github.com/arykalin/whisper-cli/internal/provider"
+	"github.com/rs/zerolog"
 )
 
 type fakeClient struct {
-	name   domain.Provider
-	models []string
+	name           domain.Provider
+	models         []string
+	transcribeFunc func(context.Context, provider.Request) (provider.Response, error)
 }
 
 func (f fakeClient) Name() domain.Provider {
@@ -32,8 +39,38 @@ func (f fakeClient) SupportedModels() []string {
 	return append([]string(nil), f.models...)
 }
 
-func (f fakeClient) Transcribe(context.Context, provider.Request) (provider.Response, error) {
+func (f fakeClient) Transcribe(ctx context.Context, req provider.Request) (provider.Response, error) {
+	if f.transcribeFunc != nil {
+		return f.transcribeFunc(ctx, req)
+	}
 	return provider.Response{}, nil
+}
+
+type emptyEnv struct{}
+
+func (emptyEnv) LookupEnv(string) (string, bool) {
+	return "", false
+}
+
+type cliAudioPipeline struct{}
+
+func (cliAudioPipeline) EnsureBinaries() error {
+	return nil
+}
+
+func (cliAudioPipeline) CollectMediaFiles(string) ([]string, error) {
+	return nil, nil
+}
+
+func (cliAudioPipeline) PrepareInput(_ context.Context, inputFile string, _ string) (audio.PreparedInput, error) {
+	return audio.PreparedInput{
+		OriginalPath:    inputFile,
+		ChunkSourcePath: inputFile,
+	}, nil
+}
+
+func (cliAudioPipeline) PrepareChunks(_ context.Context, inputFile string, _ string, _ int) ([]audio.Chunk, error) {
+	return []audio.Chunk{{Number: 0, Path: inputFile}}, nil
 }
 
 func testApplication() *app.Application {
@@ -202,5 +239,68 @@ func TestRunRejectsLegacySingleDashLongFlag(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "unknown shorthand flag") {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunAcceptsShellExpandedInputsAfterInputFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	firstInput := filepath.Join(dir, "first.m4a")
+	secondInput := filepath.Join(dir, "second.m4a")
+	for _, input := range []string{firstInput, secondInput} {
+		if err := os.WriteFile(input, []byte("audio"), 0o644); err != nil {
+			t.Fatalf("write input %s: %v", input, err)
+		}
+	}
+
+	transcribed := []string{}
+	client := fakeClient{
+		name:   domain.ProviderGroq,
+		models: []string{"whisper-large-v3-turbo"},
+		transcribeFunc: func(_ context.Context, req provider.Request) (provider.Response, error) {
+			transcribed = append(transcribed, req.FilePath)
+			return provider.Response{
+				Transcript: domain.Transcript{Text: filepath.Base(req.FilePath)},
+			}, nil
+		},
+	}
+	application := &app.Application{
+		FS:        fsx.OS{},
+		Audio:     cliAudioPipeline{},
+		Registry:  provider.NewRegistry(client),
+		Logger:    zerolog.New(io.Discard),
+		Env:       emptyEnv{},
+		CacheRoot: filepath.Join(dir, "cache"),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := Run(
+		context.Background(),
+		application,
+		[]string{
+			"--provider", "groq",
+			"--model", "whisper-large-v3-turbo",
+			"--outputs", "none",
+			"--input", firstInput,
+			secondInput,
+		},
+		&stdout,
+		&stderr,
+	)
+	if err != nil {
+		t.Fatalf("Run returned error: %v; stderr = %q", err, stderr.String())
+	}
+	if strings.Join(transcribed, ",") != strings.Join([]string{firstInput, secondInput}, ",") {
+		t.Fatalf("transcribed = %v, want ordered expanded inputs", transcribed)
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+	for _, name := range []string{"first.txt", "second.txt"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("expected %s: %v", name, err)
+		}
 	}
 }

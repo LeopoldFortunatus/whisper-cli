@@ -13,11 +13,13 @@ type ReadSeekCloser interface {
 
 type FS interface {
 	Abs(path string) (string, error)
+	UserCacheDir() (string, error)
 	Stat(path string) (os.FileInfo, error)
 	ReadDir(path string) ([]os.DirEntry, error)
 	ReadFile(path string) ([]byte, error)
 	WriteFile(path string, data []byte, perm os.FileMode) error
 	MkdirAll(path string, perm os.FileMode) error
+	RemoveAll(path string) error
 	Open(path string) (ReadSeekCloser, error)
 }
 
@@ -25,6 +27,10 @@ type OS struct{}
 
 func (OS) Abs(path string) (string, error) {
 	return filepath.Abs(path)
+}
+
+func (OS) UserCacheDir() (string, error) {
+	return os.UserCacheDir()
 }
 
 func (OS) Stat(path string) (os.FileInfo, error) {
@@ -45,6 +51,10 @@ func (OS) WriteFile(path string, data []byte, perm os.FileMode) error {
 
 func (OS) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
+}
+
+func (OS) RemoveAll(path string) error {
+	return os.RemoveAll(path)
 }
 
 func (OS) Open(path string) (ReadSeekCloser, error) {

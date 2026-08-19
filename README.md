@@ -7,8 +7,10 @@ Go CLI для локальной транскрипции медиафайлов
 - нормализует поддерживаемые аудио- и видеоформаты в `m4a` через `ffmpeg` перед транскрипцией
 - режет подготовленный media input на chunks через `ffmpeg`
 - транскрибирует chunks параллельно
-- собирает нормализованный `transcript.json` и `transcript.txt`
-- опционально пишет `timestamps.txt`, `transcript.srt`, `transcript.vtt`, `diarized.json`, `raw.json`
+- последовательно обрабатывает несколько inputs через `whisper-cli --input *.m4a`
+- по умолчанию пишет рядом с source только `<media-stem>.txt`
+- хранит canonical `transcript.json`, converted source и chunks в системном cache
+- опционально пишет stem-prefixed timestamps, subtitles, diarization и raw artifacts
 - поддерживает OpenAI и Groq
 
 ## Приоритет конфигурации
@@ -93,10 +95,19 @@ make build
 ```bash
 ./bin/whisper-cli \
   --input /path/to/media.mp4 \
-  --output-dir /tmp/whisper-cli \
   --provider openai \
-  --model whisper-1
+  --model gpt-4o-transcribe
 ```
+
+Результат будет записан в `/path/to/media.txt`.
+
+Последовательно обработать все `m4a` в каталоге:
+
+```bash
+./bin/whisper-cli --input /path/to/records/*.m4a
+```
+
+Wildcard раскрывает shell: `*.m4a` не нужно заключать в кавычки. Первый expanded path становится значением `--input`, остальные передаются CLI как продолжение input list.
 
 ```bash
 GROQ_API_KEY=... ./bin/whisper-cli \
@@ -107,18 +118,12 @@ GROQ_API_KEY=... ./bin/whisper-cli \
   --outputs timestamps,raw
 ```
 
-Для моделей без `segment timestamps` CLI автоматически отключает `timestamps`. Для `gpt-4o-transcribe-diarize` это означает, что запуск без явного `--outputs` пишет `diarized.json` вместе с обязательными `transcript.json`/`transcript.txt`. Если нужны только plain output-артефакты без других optional artifacts, можно явно указать:
+`--output-dir` собирает public artifacts плоско в указанном каталоге. До первого provider request CLI проверяет, что разные inputs не претендуют на один output path.
 
-```bash
-./bin/whisper-cli \
-  --input /path/to/media.ogg \
-  --provider openai \
-  --model gpt-4o-transcribe \
-  --outputs none
-```
+Default `outputs=none`. Для моделей без `segment timestamps` явно запрошенный `timestamps` автоматически отключается с warning. `gpt-4o-transcribe-diarize` без явного `--outputs diarized` также пишет наружу только plain TXT.
 
 CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wav`, `webm` как входные media extensions.
-Любой поддерживаемый non-`m4a` input сначала конвертируется в `<output>/<base>/_work/source.m4a`, после чего chunking идёт уже по этому файлу.
+Любой поддерживаемый non-`m4a` input сначала конвертируется в системном cache, после чего chunking идёт уже по подготовленному файлу.
 
 ## Флаги CLI
 
@@ -136,8 +141,11 @@ CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wa
 - `--concurrency`
 - `--prompt`
 
-`--outputs` управляет только optional artifacts. `transcript.json` и `transcript.txt` создаются всегда. Если модель не поддерживает `segment timestamps`, `timestamps` автоматически отключаются с warning.
-Для `gpt-4o-transcribe-diarize` default `outputs=timestamps` после такого отключения заменяется на `diarized`, поэтому по умолчанию создаётся `diarized.json`. Явные `--outputs none`, `--outputs raw` или `WHISPER_CLI_OUTPUTS=...` уважаются без auto-добавления `diarized`.
+`--input` задаёт первый file или directory. Дополнительные paths после него образуют ordered batch; directory inputs по-прежнему сканируются non-recursively и сортируются по имени.
+
+Без `--output-dir` public artifacts пишутся рядом с каждым source. Явный `--output-dir` или `WHISPER_CLI_OUTPUT_DIR` перенаправляет их в один каталог.
+
+`--outputs` управляет только дополнительными public artifacts. Default — `none`; plain `<stem>.txt` и cached `transcript.json` создаются всегда. Если модель не поддерживает `segment timestamps`, `timestamps` автоматически отключается с warning.
 
 Поддерживаемые optional outputs:
 
@@ -163,19 +171,25 @@ OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/a
 
 ## Выходные артефакты
 
-Для файла `lecture.mp4` CLI пишет в `<output-dir>/lecture/`:
+Для source `/records/lecture.mp4` default public output содержит только:
+
+- `/records/lecture.txt`
+
+При явном `--outputs timestamps,srt,vtt,diarized,raw` имена дополнительных public artifacts строятся от source stem:
+
+- `lecture.timestamps.txt`
+- `lecture.srt`
+- `lecture.vtt`
+- `lecture.diarized.json`
+- `lecture.raw.json`
+
+Служебные данные последнего запуска хранятся в `<os-user-cache>/whisper-cli/<sha256-absolute-input>/`:
 
 - `transcript.json`
-- `transcript.txt`
-- `timestamps.txt` при `outputs=timestamps`
-- `transcript.srt` при `outputs=srt`
-- `transcript.vtt` при `outputs=vtt`
-- `diarized.json` при `outputs=diarized`
-- `raw.json` при `outputs=raw`
-- `_work/source.m4a` для non-`m4a` input
-- `_work/chunk_*.m4a` как промежуточные chunk-файлы
+- `work/source.m4a` для non-`m4a` input
+- `work/chunk_*.m4a`
 
-Если вход уже `lecture.m4a`, `_work/source.m4a` не создаётся.
+На Linux `<os-user-cache>` определяется через `os.UserCacheDir`: обычно это `$XDG_CACHE_HOME` или `~/.cache`. Перед повторной обработкой того же absolute input его cache directory заменяется, поэтому stale chunks не подмешиваются. Cache не используется для пропуска provider requests.
 
 ## Проверки качества
 

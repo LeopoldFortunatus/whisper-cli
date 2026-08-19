@@ -42,8 +42,8 @@ func TestResolvePrecedenceFlagsEnvDefaults(t *testing.T) {
 	if cfg.Model != "whisper-large-v3" {
 		t.Fatalf("model = %s", cfg.Model)
 	}
-	if cfg.Input != "flag-input.mp3" {
-		t.Fatalf("input = %s", cfg.Input)
+	if len(cfg.Inputs) != 1 || cfg.Inputs[0] != "flag-input.mp3" {
+		t.Fatalf("inputs = %v", cfg.Inputs)
 	}
 	if cfg.OutputDir != "flag-output" {
 		t.Fatalf("outputDir = %s", cfg.OutputDir)
@@ -53,9 +53,6 @@ func TestResolvePrecedenceFlagsEnvDefaults(t *testing.T) {
 	}
 	if !cfg.Outputs.Enabled(domain.ArtifactVTT) || !cfg.Outputs.Enabled(domain.ArtifactRaw) {
 		t.Fatalf("outputs = %#v", cfg.Outputs)
-	}
-	if !cfg.OutputsExplicit {
-		t.Fatal("outputsExplicit = false, want true for env outputs")
 	}
 	if cfg.ChunkSeconds != 333 {
 		t.Fatalf("chunkSeconds = %d", cfg.ChunkSeconds)
@@ -85,21 +82,37 @@ func TestResolveUsesDefaultsWithoutEnv(t *testing.T) {
 	if cfg.Model != "gpt-4o-transcribe" {
 		t.Fatalf("model = %s, want gpt-4o-transcribe", cfg.Model)
 	}
-	if cfg.OutputDir != "output" {
-		t.Fatalf("outputDir = %s, want output", cfg.OutputDir)
+	if len(cfg.Inputs) != 1 || cfg.Inputs[0] != "input.m4a" {
+		t.Fatalf("inputs = %v, want [input.m4a]", cfg.Inputs)
+	}
+	if cfg.OutputDir != "" {
+		t.Fatalf("outputDir = %s, want empty default", cfg.OutputDir)
 	}
 	if cfg.Language != "ru" {
 		t.Fatalf("language = %s, want ru", cfg.Language)
 	}
-	if !cfg.Outputs.Enabled(domain.ArtifactTimestamps) {
-		t.Fatalf("outputs = %#v, want timestamps enabled", cfg.Outputs)
-	}
-	if cfg.OutputsExplicit {
-		t.Fatal("outputsExplicit = true, want false for default outputs")
+	if len(cfg.Outputs) != 0 {
+		t.Fatalf("outputs = %#v, want none", cfg.Outputs)
 	}
 }
 
-func TestResolveMarksFlagOutputsExplicit(t *testing.T) {
+func TestResolveRejectsEmptyExplicitOutputDir(t *testing.T) {
+	t.Parallel()
+
+	overrides := Overrides{}
+	overrides.Input.SetValue("input.m4a")
+	overrides.OutputDir.SetValue("")
+
+	_, err := Resolve(overrides, mapEnv{})
+	if err == nil {
+		t.Fatal("expected empty output-dir error")
+	}
+	if !strings.Contains(err.Error(), "output-dir") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestResolveAcceptsExplicitNoOutputs(t *testing.T) {
 	t.Parallel()
 
 	overrides := Overrides{}
@@ -113,9 +126,6 @@ func TestResolveMarksFlagOutputsExplicit(t *testing.T) {
 
 	if len(cfg.Outputs) != 0 {
 		t.Fatalf("outputs = %#v, want none", cfg.Outputs)
-	}
-	if !cfg.OutputsExplicit {
-		t.Fatal("outputsExplicit = false, want true for flag outputs")
 	}
 }
 

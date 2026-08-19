@@ -22,9 +22,8 @@ type rootOptions struct {
 func newRootOptions() rootOptions {
 	var opts rootOptions
 	opts.overrides.Provider.Value = string(config.DefaultProvider)
-	opts.overrides.OutputDir.Value = "output"
 	opts.overrides.Language.Value = "ru"
-	opts.overrides.Outputs.Value = "timestamps"
+	opts.overrides.Outputs.Value = "none"
 	opts.overrides.ChunkSeconds.Value = 600
 	opts.overrides.Concurrency.Value = runtime.NumCPU()
 	return opts
@@ -47,9 +46,9 @@ func NewRootCommand(application *app.Application) *cobra.Command {
 	opts := newRootOptions()
 
 	root := &cobra.Command{
-		Use:           "whisper-cli",
+		Use:           "whisper-cli --input <media> [media...]",
 		Short:         "Transcribe local media files with OpenAI-compatible speech providers",
-		Args:          cobra.NoArgs,
+		Args:          cobra.ArbitraryArgs,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,6 +56,7 @@ func NewRootCommand(application *app.Application) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			cfg.Inputs = append(cfg.Inputs, args...)
 			return application.Run(cmd.Context(), cfg)
 		},
 	}
@@ -68,7 +68,7 @@ func NewRootCommand(application *app.Application) *cobra.Command {
 	flags.Var(&opts.overrides.Input, "input", "Input media file or directory")
 	flags.Var(&opts.overrides.OutputDir, "output-dir", "Output directory root")
 	flags.Var(&opts.overrides.Language, "language", "Language code")
-	flags.Var(&opts.overrides.Outputs, "outputs", "Optional artifacts: timestamps,srt,vtt,diarized,raw or none")
+	flags.Var(&opts.overrides.Outputs, "outputs", "Additional artifacts: timestamps,srt,vtt,diarized,raw or none")
 	flags.Var(&opts.overrides.ChunkSeconds, "chunk-seconds", "Chunk size in seconds")
 	flags.Var(&opts.overrides.Concurrency, "concurrency", "Number of worker goroutines")
 	flags.Var(&opts.overrides.Prompt, "prompt", "Prompt for supported models")

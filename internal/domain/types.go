@@ -44,9 +44,7 @@ func KnownArtifacts() []ArtifactKind {
 type ArtifactSet map[ArtifactKind]bool
 
 func DefaultArtifacts() ArtifactSet {
-	return ArtifactSet{
-		ArtifactTimestamps: true,
-	}
+	return ArtifactSet{}
 }
 
 func ParseArtifactSet(value string) (ArtifactSet, error) {

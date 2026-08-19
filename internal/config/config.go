@@ -76,16 +76,15 @@ type Overrides struct {
 }
 
 type Config struct {
-	Provider        domain.Provider
-	Model           string
-	Input           string
-	OutputDir       string
-	Language        string
-	Outputs         domain.ArtifactSet
-	OutputsExplicit bool
-	ChunkSeconds    int
-	Concurrency     int
-	Prompt          string
+	Provider     domain.Provider
+	Model        string
+	Inputs       []string
+	OutputDir    string
+	Language     string
+	Outputs      domain.ArtifactSet
+	ChunkSeconds int
+	Concurrency  int
+	Prompt       string
 }
 
 type EnvSource interface {
@@ -111,15 +110,18 @@ func Resolve(overrides Overrides, env EnvSource) (Config, error) {
 		model = defaultModelForProvider(providerName)
 	}
 
-	outputDir := chooseString(overrides.OutputDir, env, "WHISPER_CLI_OUTPUT_DIR", "output")
+	outputDir, outputDirExplicit := chooseStringWithExplicit(overrides.OutputDir, env, "WHISPER_CLI_OUTPUT_DIR", "")
 	language := chooseString(overrides.Language, env, "WHISPER_CLI_LANGUAGE", "ru")
-	outputsRaw, outputsExplicit := chooseStringWithExplicit(overrides.Outputs, env, "WHISPER_CLI_OUTPUTS", "timestamps")
+	outputsRaw := chooseString(overrides.Outputs, env, "WHISPER_CLI_OUTPUTS", "none")
 	chunkSeconds := chooseInt(overrides.ChunkSeconds, env, "WHISPER_CLI_CHUNK_SECONDS", 600)
 	concurrency := chooseInt(overrides.Concurrency, env, "WHISPER_CLI_CONCURRENCY", runtime.NumCPU())
 	prompt := chooseString(overrides.Prompt, env, "WHISPER_CLI_PROMPT", "")
 
 	if input == "" {
 		return Config{}, errors.New("no input specified; use --input or WHISPER_CLI_INPUT")
+	}
+	if outputDirExplicit && outputDir == "" {
+		return Config{}, errors.New("output-dir must not be empty")
 	}
 	if concurrency <= 0 {
 		return Config{}, errors.New("concurrency must be greater than zero")
@@ -141,16 +143,15 @@ func Resolve(overrides Overrides, env EnvSource) (Config, error) {
 	}
 
 	return Config{
-		Provider:        providerValue,
-		Model:           strings.TrimSpace(model),
-		Input:           strings.TrimSpace(input),
-		OutputDir:       strings.TrimSpace(outputDir),
-		Language:        strings.TrimSpace(language),
-		Outputs:         outputs,
-		OutputsExplicit: outputsExplicit,
-		ChunkSeconds:    chunkSeconds,
-		Concurrency:     concurrency,
-		Prompt:          strings.TrimSpace(prompt),
+		Provider:     providerValue,
+		Model:        strings.TrimSpace(model),
+		Inputs:       []string{strings.TrimSpace(input)},
+		OutputDir:    strings.TrimSpace(outputDir),
+		Language:     strings.TrimSpace(language),
+		Outputs:      outputs,
+		ChunkSeconds: chunkSeconds,
+		Concurrency:  concurrency,
+		Prompt:       strings.TrimSpace(prompt),
 	}, nil
 }
 

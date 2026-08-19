@@ -1,7 +1,7 @@
 # Реестр техдолга
 
 Владелец: Platform Team
-Проверено: 2026-06-05
+Проверено: 2026-08-19
 
 ## Active
 
@@ -25,10 +25,6 @@
 - Влияние: регрессии вроде `fatal` на `-h/--help` ловятся только ручным запуском, потому что `current tests` в основном `package-level` и не проверяют `entrypoint UX/end-to-end exit behavior`.
 - План: добавить лёгкие `smoke tests` для `help`, `parse failures` и базового `happy path` бинарника без `live-provider dependency`.
 
-### TD-006 Batch output directories конфликтуют при общих basename
-- Влияние: при `batch run` файлы вроде `lecture.m4a` и `lecture.mp3` пишут артефакты в один и тот же `<output-dir>/lecture`, что создаёт риск `silent overwrite`, смешивания `chunk artifacts` и потери данных.
-- План: сделать `output naming` `collision-safe` для `directory input` и добавить `directory-level regression test`.
-
 ### TD-007 Транскрипция чанков не делает fail-fast при первой ошибке
 - Влияние: после первой ошибки уже `queued` или `in-flight` чанки продолжают транскрибироваться, из-за чего пользователь дольше ждёт ошибку и платит за лишние `provider requests`.
 - План: перевести оркестрацию чанков на `context.WithCancel`, прекращать `scheduling` после первой ошибки и добавить `tests` на `cancel/error path`.
@@ -38,6 +34,9 @@
 - План: добавить `deterministic unit tests` для `Retry`, `ParseOpenAICompatibleTranscript`, `MarshalRawArray` и `Groq request construction/response parsing`.
 
 ## Closed
+
+### TD-006 Batch output directories конфликтовали при общих basename
+- Решение: batch manifest вычисляет все stem-prefixed public paths до транскрипции и отклоняет разные inputs, претендующие на один destination; cache directories разделены полным SHA-256 от absolute input path.
 
 ### TD-010 Локальный `make ci` сломан устаревшим default-model тестом
 - Решение: `TestResolveUsesDefaultsWithoutEnv` обновлён под актуальный OpenAI default `gpt-4o-transcribe`, а пользовательская документация явно фиксирует default `provider=openai` и `model=gpt-4o-transcribe`.

@@ -34,6 +34,7 @@ type fakeAudioPipeline struct {
 	mediaFiles         []string
 	preparedInput      audio.PreparedInput
 	chunks             []audio.Chunk
+	prepareChunksFunc  func(inputFile string, workDir string) ([]audio.Chunk, error)
 	ensureErr          error
 	collectErr         error
 	prepareInputErr    error
@@ -86,15 +87,19 @@ func (f *fakeAudioPipeline) PrepareChunks(_ context.Context, inputFile string, w
 	if f.prepareChunksErr != nil {
 		return nil, f.prepareChunksErr
 	}
+	if f.prepareChunksFunc != nil {
+		return f.prepareChunksFunc(inputFile, workDir)
+	}
 	return f.chunks, nil
 }
 
 type fakeProvider struct {
-	name         domain.Provider
-	capabilities map[string]domain.Capabilities
-	responses    map[string]provider.Response
-	preflightErr error
-	onPreflight  func()
+	name           domain.Provider
+	capabilities   map[string]domain.Capabilities
+	responses      map[string]provider.Response
+	transcribeFunc func(ctx context.Context, req provider.Request) (provider.Response, error)
+	preflightErr   error
+	onPreflight    func()
 }
 
 func (f fakeProvider) Name() domain.Provider {
@@ -123,11 +128,261 @@ func (f fakeProvider) SupportedModels() []string {
 }
 
 func (f fakeProvider) Transcribe(ctx context.Context, req provider.Request) (provider.Response, error) {
+	if f.transcribeFunc != nil {
+		return f.transcribeFunc(ctx, req)
+	}
 	response, ok := f.responses[req.FilePath]
 	if !ok {
 		return provider.Response{}, errors.New("missing fake response")
 	}
 	return response, nil
+}
+
+func TestApplicationRunWritesDefaultOutputBesideInputAndResetsCache(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mediaDir := filepath.Join(dir, "media")
+	if err := os.Mkdir(mediaDir, 0o755); err != nil {
+		t.Fatalf("mkdir media dir: %v", err)
+	}
+	input := filepath.Join(mediaDir, "lecture.m4a")
+	if err := os.WriteFile(input, []byte("audio"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	publicTranscript := filepath.Join(mediaDir, "lecture.txt")
+	if err := os.WriteFile(publicTranscript, []byte("old transcript\n"), 0o644); err != nil {
+		t.Fatalf("write old transcript: %v", err)
+	}
+
+	cacheRoot := filepath.Join(dir, "cache")
+	cacheDir := filepath.Join(cacheRoot, cacheKey(input))
+	workDir := filepath.Join(cacheDir, "work")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatalf("mkdir stale work dir: %v", err)
+	}
+	staleChunk := filepath.Join(workDir, "chunk_999.m4a")
+	if err := os.WriteFile(staleChunk, []byte("stale"), 0o600); err != nil {
+		t.Fatalf("write stale chunk: %v", err)
+	}
+
+	audioPipeline := &fakeAudioPipeline{
+		chunks: []audio.Chunk{{Number: 0, Path: "chunk-0"}},
+	}
+	client := fakeProvider{
+		name: domain.ProviderOpenAI,
+		capabilities: map[string]domain.Capabilities{
+			"gpt-4o-transcribe": {},
+		},
+		responses: map[string]provider.Response{
+			"chunk-0": {Transcript: domain.Transcript{Text: "new transcript"}},
+		},
+	}
+	application := &Application{
+		FS:        fsx.OS{},
+		Audio:     audioPipeline,
+		Registry:  provider.NewRegistry(client),
+		Logger:    zerolog.New(io.Discard),
+		Env:       staticEnv{},
+		CacheRoot: cacheRoot,
+	}
+
+	err := application.Run(context.Background(), config.Config{
+		Inputs:       []string{input},
+		Provider:     domain.ProviderOpenAI,
+		Model:        "gpt-4o-transcribe",
+		Outputs:      domain.DefaultArtifacts(),
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	text, err := os.ReadFile(publicTranscript)
+	if err != nil {
+		t.Fatalf("read public transcript: %v", err)
+	}
+	if string(text) != "new transcript\n" {
+		t.Fatalf("public transcript = %q", string(text))
+	}
+	if _, err := os.Stat(filepath.Join(mediaDir, "transcript.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no public transcript.json, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "transcript.json")); err != nil {
+		t.Fatalf("expected cached transcript.json: %v", err)
+	}
+	if _, err := os.Stat(staleChunk); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected stale chunk to be removed, stat err = %v", err)
+	}
+}
+
+func TestApplicationRunProcessesInputsSequentiallyAndContinuesAfterError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	firstInput := filepath.Join(dir, "first.m4a")
+	secondInput := filepath.Join(dir, "second.m4a")
+	for _, input := range []string{firstInput, secondInput} {
+		if err := os.WriteFile(input, []byte("audio"), 0o644); err != nil {
+			t.Fatalf("write input %s: %v", input, err)
+		}
+	}
+
+	audioPipeline := &fakeAudioPipeline{
+		prepareChunksFunc: func(inputFile string, _ string) ([]audio.Chunk, error) {
+			return []audio.Chunk{{Number: 0, Path: inputFile}}, nil
+		},
+	}
+	transcribed := []string{}
+	client := fakeProvider{
+		name: domain.ProviderOpenAI,
+		capabilities: map[string]domain.Capabilities{
+			"gpt-4o-transcribe": {},
+		},
+		transcribeFunc: func(_ context.Context, req provider.Request) (provider.Response, error) {
+			transcribed = append(transcribed, req.FilePath)
+			if req.FilePath == firstInput {
+				return provider.Response{}, errors.New("first input failed")
+			}
+			return provider.Response{Transcript: domain.Transcript{Text: "second transcript"}}, nil
+		},
+	}
+	application := &Application{
+		FS:        fsx.OS{},
+		Audio:     audioPipeline,
+		Registry:  provider.NewRegistry(client),
+		Logger:    zerolog.New(io.Discard),
+		Env:       staticEnv{},
+		CacheRoot: filepath.Join(dir, "cache"),
+	}
+
+	err := application.Run(context.Background(), config.Config{
+		Inputs:       []string{firstInput, secondInput},
+		Provider:     domain.ProviderOpenAI,
+		Model:        "gpt-4o-transcribe",
+		Outputs:      domain.DefaultArtifacts(),
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
+	})
+	if err == nil || !strings.Contains(err.Error(), "first input failed") {
+		t.Fatalf("Run error = %v, want first input failure", err)
+	}
+	if strings.Join(transcribed, ",") != strings.Join([]string{firstInput, secondInput}, ",") {
+		t.Fatalf("transcribed = %v, want ordered inputs", transcribed)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "first.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no transcript for failed input, stat err = %v", err)
+	}
+	text, err := os.ReadFile(filepath.Join(dir, "second.txt"))
+	if err != nil {
+		t.Fatalf("read second transcript: %v", err)
+	}
+	if string(text) != "second transcript\n" {
+		t.Fatalf("second transcript = %q", string(text))
+	}
+}
+
+func TestApplicationRunRejectsPublicOutputCollisionBeforeTranscription(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	firstInput := filepath.Join(dir, "first", "lecture.m4a")
+	secondInput := filepath.Join(dir, "second", "lecture.m4a")
+	for _, input := range []string{firstInput, secondInput} {
+		if err := os.MkdirAll(filepath.Dir(input), 0o755); err != nil {
+			t.Fatalf("mkdir input dir: %v", err)
+		}
+		if err := os.WriteFile(input, []byte("audio"), 0o644); err != nil {
+			t.Fatalf("write input: %v", err)
+		}
+	}
+
+	transcribeCalls := 0
+	audioPipeline := &fakeAudioPipeline{
+		chunks: []audio.Chunk{{Number: 0, Path: "chunk-0"}},
+	}
+	client := fakeProvider{
+		name: domain.ProviderOpenAI,
+		capabilities: map[string]domain.Capabilities{
+			"gpt-4o-transcribe": {},
+		},
+		transcribeFunc: func(context.Context, provider.Request) (provider.Response, error) {
+			transcribeCalls++
+			return provider.Response{Transcript: domain.Transcript{Text: "unexpected"}}, nil
+		},
+	}
+	application := &Application{
+		FS:        fsx.OS{},
+		Audio:     audioPipeline,
+		Registry:  provider.NewRegistry(client),
+		Logger:    zerolog.New(io.Discard),
+		Env:       staticEnv{},
+		CacheRoot: filepath.Join(dir, "cache"),
+	}
+
+	err := application.Run(context.Background(), config.Config{
+		Inputs:       []string{firstInput, secondInput},
+		OutputDir:    filepath.Join(dir, "out"),
+		Provider:     domain.ProviderOpenAI,
+		Model:        "gpt-4o-transcribe",
+		Outputs:      domain.DefaultArtifacts(),
+		ChunkSeconds: 600,
+		Concurrency:  1,
+		Language:     "ru",
+	})
+	if err == nil || !strings.Contains(err.Error(), "public output path collision") {
+		t.Fatalf("Run error = %v, want collision error", err)
+	}
+	if transcribeCalls != 0 {
+		t.Fatalf("transcribe calls = %d, want 0", transcribeCalls)
+	}
+	if len(audioPipeline.prepareInputCalls) != 0 {
+		t.Fatalf("prepare input calls = %v, want none", audioPipeline.prepareInputCalls)
+	}
+}
+
+func TestApplicationPlanBatchDeduplicatesInputsAndSeparatesSameStems(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	firstInput := filepath.Join(dir, "first", "lecture.m4a")
+	secondInput := filepath.Join(dir, "second", "lecture.m4a")
+	for _, input := range []string{firstInput, secondInput} {
+		if err := os.MkdirAll(filepath.Dir(input), 0o755); err != nil {
+			t.Fatalf("mkdir input dir: %v", err)
+		}
+		if err := os.WriteFile(input, []byte("audio"), 0o644); err != nil {
+			t.Fatalf("write input: %v", err)
+		}
+	}
+
+	application := &Application{
+		FS:        fsx.OS{},
+		Audio:     &fakeAudioPipeline{},
+		CacheRoot: filepath.Join(dir, "cache"),
+	}
+	items, err := application.planBatch(config.Config{
+		Inputs:  []string{firstInput, firstInput, secondInput},
+		Outputs: domain.DefaultArtifacts(),
+	})
+	if err != nil {
+		t.Fatalf("planBatch returned error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("items = %v, want two deduplicated inputs", items)
+	}
+	if items[0].inputPath != firstInput || items[1].inputPath != secondInput {
+		t.Fatalf("input order = [%s %s]", items[0].inputPath, items[1].inputPath)
+	}
+	if items[0].publicDir == items[1].publicDir {
+		t.Fatalf("public dirs must stay source-local: %s", items[0].publicDir)
+	}
+	if items[0].cacheDir == items[1].cacheDir {
+		t.Fatalf("cache dirs must differ for distinct absolute paths: %s", items[0].cacheDir)
+	}
 }
 
 type staticEnv map[string]string
@@ -240,7 +495,9 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 		t.Fatalf("write input: %v", err)
 	}
 	outputRoot := filepath.Join(dir, "out")
-	workDir := filepath.Join(outputRoot, "input", "_work")
+	cacheRoot := filepath.Join(dir, "cache")
+	cacheDir := filepath.Join(cacheRoot, cacheKey(input))
+	workDir := filepath.Join(cacheDir, "work")
 
 	audioPipeline := &fakeAudioPipeline{
 		preparedInput: audio.PreparedInput{
@@ -287,15 +544,16 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 	}
 
 	app := &Application{
-		FS:       fsx.OS{},
-		Audio:    audioPipeline,
-		Registry: provider.NewRegistry(client),
-		Logger:   logger,
-		Env:      staticEnv{},
+		FS:        fsx.OS{},
+		Audio:     audioPipeline,
+		Registry:  provider.NewRegistry(client),
+		Logger:    logger,
+		Env:       staticEnv{},
+		CacheRoot: cacheRoot,
 	}
 
 	err := app.Run(context.Background(), config.Config{
-		Input:        input,
+		Inputs:       []string{input},
 		OutputDir:    outputRoot,
 		Provider:     domain.ProviderOpenAI,
 		Model:        "whisper-1",
@@ -330,8 +588,7 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 		t.Fatalf("PrepareChunks workDir = %s, want %s", audioPipeline.prepareChunksCalls[0].workDir, workDir)
 	}
 
-	outDir := filepath.Join(outputRoot, "input")
-	text, err := os.ReadFile(filepath.Join(outDir, "transcript.txt"))
+	text, err := os.ReadFile(filepath.Join(outputRoot, "input.txt"))
 	if err != nil {
 		t.Fatalf("read transcript.txt: %v", err)
 	}
@@ -339,7 +596,7 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 		t.Fatalf("unexpected transcript.txt: %q", string(text))
 	}
 
-	timestamps, err := os.ReadFile(filepath.Join(outDir, "timestamps.txt"))
+	timestamps, err := os.ReadFile(filepath.Join(outputRoot, "input.timestamps.txt"))
 	if err != nil {
 		t.Fatalf("read timestamps.txt: %v", err)
 	}
@@ -347,7 +604,7 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 		t.Fatalf("timestamps did not contain shifted second segment: %s", string(timestamps))
 	}
 
-	raw, err := os.ReadFile(filepath.Join(outDir, "raw.json"))
+	raw, err := os.ReadFile(filepath.Join(outputRoot, "input.raw.json"))
 	if err != nil {
 		t.Fatalf("read raw.json: %v", err)
 	}
@@ -359,7 +616,7 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 		t.Fatalf("raw item count = %d", len(rawItems))
 	}
 
-	transcriptJSON, err := os.ReadFile(filepath.Join(outDir, "transcript.json"))
+	transcriptJSON, err := os.ReadFile(filepath.Join(cacheDir, "transcript.json"))
 	if err != nil {
 		t.Fatalf("read transcript.json: %v", err)
 	}
@@ -370,7 +627,10 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 	if transcript.Source != input {
 		t.Fatalf("transcript source = %s, want %s", transcript.Source, input)
 	}
-	if _, err := os.Stat(filepath.Join(outDir, "_work", "transcript.txt")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(outputRoot, "transcript.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no public transcript.json, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "transcript.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected no transcript artifacts in _work, stat err = %v", err)
 	}
 }
@@ -406,17 +666,18 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 				},
 			},
 		}),
-		Logger: logger,
-		Env:    config.OSEnv{},
+		Logger:    logger,
+		Env:       config.OSEnv{},
+		CacheRoot: filepath.Join(dir, "cache"),
 	}
 
 	outputRoot := filepath.Join(dir, "out")
 	err := app.Run(context.Background(), config.Config{
-		Input:        input,
+		Inputs:       []string{input},
 		OutputDir:    outputRoot,
 		Provider:     domain.ProviderOpenAI,
 		Model:        "gpt-4o-transcribe",
-		Outputs:      domain.DefaultArtifacts(),
+		Outputs:      domain.ArtifactSet{domain.ArtifactTimestamps: true},
 		ChunkSeconds: 600,
 		Concurrency:  1,
 		Language:     "ru",
@@ -425,12 +686,11 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	outDir := filepath.Join(outputRoot, "input")
-	if _, err := os.Stat(filepath.Join(outDir, "timestamps.txt")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(outputRoot, "input.timestamps.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected timestamps.txt to be skipped, stat err = %v", err)
 	}
 
-	text, err := os.ReadFile(filepath.Join(outDir, "transcript.txt"))
+	text, err := os.ReadFile(filepath.Join(outputRoot, "input.txt"))
 	if err != nil {
 		t.Fatalf("read transcript.txt: %v", err)
 	}
@@ -439,7 +699,7 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 	}
 }
 
-func TestApplicationRunDefaultsDiarizedArtifactForDiarizeModel(t *testing.T) {
+func TestApplicationRunDoesNotPublishDiarizedArtifactByDefault(t *testing.T) {
 	t.Parallel()
 
 	logger := zerolog.New(io.Discard)
@@ -475,13 +735,14 @@ func TestApplicationRunDefaultsDiarizedArtifactForDiarizeModel(t *testing.T) {
 				},
 			},
 		}),
-		Logger: logger,
-		Env:    config.OSEnv{},
+		Logger:    logger,
+		Env:       config.OSEnv{},
+		CacheRoot: filepath.Join(dir, "cache"),
 	}
 
 	outputRoot := filepath.Join(dir, "out")
 	err := app.Run(context.Background(), config.Config{
-		Input:        input,
+		Inputs:       []string{input},
 		OutputDir:    outputRoot,
 		Provider:     domain.ProviderOpenAI,
 		Model:        "gpt-4o-transcribe-diarize",
@@ -494,16 +755,18 @@ func TestApplicationRunDefaultsDiarizedArtifactForDiarizeModel(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	outDir := filepath.Join(outputRoot, "input")
-	if _, err := os.Stat(filepath.Join(outDir, "timestamps.txt")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(outputRoot, "input.timestamps.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected timestamps.txt to be skipped, stat err = %v", err)
 	}
-	diarized, err := os.ReadFile(filepath.Join(outDir, "diarized.json"))
-	if err != nil {
-		t.Fatalf("read diarized.json: %v", err)
+	if _, err := os.Stat(filepath.Join(outputRoot, "input.diarized.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected no default diarized.json, stat err = %v", err)
 	}
-	if !strings.Contains(string(diarized), "speaker_0") {
-		t.Fatalf("diarized.json did not contain speaker segment: %s", string(diarized))
+	text, err := os.ReadFile(filepath.Join(outputRoot, "input.txt"))
+	if err != nil {
+		t.Fatalf("read input.txt: %v", err)
+	}
+	if strings.TrimSpace(string(text)) != "speaker transcript" {
+		t.Fatalf("unexpected input.txt: %q", string(text))
 	}
 }
 
@@ -603,7 +866,7 @@ func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 	}
 
 	err := app.Run(context.Background(), config.Config{
-		Input:        input,
+		Inputs:       []string{input},
 		OutputDir:    "output",
 		Provider:     domain.ProviderOpenAI,
 		Model:        "gpt-4o-transcribe",
@@ -650,7 +913,7 @@ func TestApplicationRunRejectsEmptyMediaDirectory(t *testing.T) {
 	}
 
 	err := app.Run(context.Background(), config.Config{
-		Input:        inputDir,
+		Inputs:       []string{inputDir},
 		OutputDir:    "output",
 		Provider:     domain.ProviderOpenAI,
 		Model:        "whisper-1",

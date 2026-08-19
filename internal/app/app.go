@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -25,11 +26,12 @@ import (
 )
 
 type Application struct {
-	FS       fsx.FS
-	Audio    audio.Pipeline
-	Registry provider.Registry
-	Logger   zerolog.Logger
-	Env      config.EnvSource
+	FS        fsx.FS
+	Audio     audio.Pipeline
+	Registry  provider.Registry
+	Logger    zerolog.Logger
+	Env       config.EnvSource
+	CacheRoot string
 
 	OpenAIKeyResolver     keyResolver
 	OpenAIProviderFactory func(apiKey string) provider.Client
@@ -80,42 +82,166 @@ func (a *Application) Run(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 
-	inputPath, err := a.FS.Abs(filepath.Clean(cfg.Input))
+	items, err := a.planBatch(cfg)
 	if err != nil {
-		return fmt.Errorf("resolve input path: %w", err)
-	}
-	outputRoot, err := a.FS.Abs(filepath.Clean(cfg.OutputDir))
-	if err != nil {
-		return fmt.Errorf("resolve output dir: %w", err)
+		return err
 	}
 
-	info, err := a.FS.Stat(inputPath)
-	if err != nil {
-		return fmt.Errorf("stat input path %s: %w", inputPath, err)
-	}
-
-	if info.IsDir() {
-		files, err := a.Audio.CollectMediaFiles(inputPath)
-		if err != nil {
-			return fmt.Errorf("scan input directory: %w", err)
-		}
-		if len(files) == 0 {
-			return errors.New("input directory does not contain supported media files")
-		}
-
-		var firstErr error
-		for _, file := range files {
-			if err := a.processFile(ctx, client, cfg, file, outputRoot); err != nil {
-				a.Logger.Error().Err(err).Str("file", file).Msg("failed to transcribe file")
-				if firstErr == nil {
-					firstErr = err
-				}
+	var firstErr error
+	for _, item := range items {
+		if err := a.processFile(ctx, client, cfg, item); err != nil {
+			a.Logger.Error().Err(err).Str("file", item.inputPath).Msg("failed to transcribe file")
+			if firstErr == nil {
+				firstErr = err
 			}
 		}
-		return firstErr
+	}
+	return firstErr
+}
+
+type batchItem struct {
+	inputPath string
+	publicDir string
+	stem      string
+	cacheDir  string
+	workDir   string
+}
+
+func (a *Application) planBatch(cfg config.Config) ([]batchItem, error) {
+	inputFiles, err := a.collectInputFiles(cfg.Inputs)
+	if err != nil {
+		return nil, err
 	}
 
-	return a.processFile(ctx, client, cfg, inputPath, outputRoot)
+	cacheRoot, err := a.resolveCacheRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	outputRoot := ""
+	if cfg.OutputDir != "" {
+		outputRoot, err = a.FS.Abs(filepath.Clean(cfg.OutputDir))
+		if err != nil {
+			return nil, fmt.Errorf("resolve output dir: %w", err)
+		}
+	}
+
+	items := make([]batchItem, 0, len(inputFiles))
+	for _, inputPath := range inputFiles {
+		publicDir := filepath.Dir(inputPath)
+		if outputRoot != "" {
+			publicDir = outputRoot
+		}
+
+		stem := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
+		cacheDir := filepath.Join(cacheRoot, cacheKey(inputPath))
+		items = append(items, batchItem{
+			inputPath: inputPath,
+			publicDir: publicDir,
+			stem:      stem,
+			cacheDir:  cacheDir,
+			workDir:   filepath.Join(cacheDir, "work"),
+		})
+	}
+
+	if err := validatePublicPathCollisions(items, cfg.Outputs); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (a *Application) collectInputFiles(inputs []string) ([]string, error) {
+	if len(inputs) == 0 {
+		return nil, errors.New("no input specified; use --input or WHISPER_CLI_INPUT")
+	}
+
+	files := []string{}
+	seen := map[string]struct{}{}
+	for _, input := range inputs {
+		trimmed := strings.TrimSpace(input)
+		if trimmed == "" {
+			return nil, errors.New("input path must not be empty")
+		}
+
+		inputPath, err := a.FS.Abs(filepath.Clean(trimmed))
+		if err != nil {
+			return nil, fmt.Errorf("resolve input path %q: %w", trimmed, err)
+		}
+		info, err := a.FS.Stat(inputPath)
+		if err != nil {
+			return nil, fmt.Errorf("stat input path %s: %w", inputPath, err)
+		}
+
+		candidates := []string{inputPath}
+		if info.IsDir() {
+			candidates, err = a.Audio.CollectMediaFiles(inputPath)
+			if err != nil {
+				return nil, fmt.Errorf("scan input directory %s: %w", inputPath, err)
+			}
+			if len(candidates) == 0 {
+				return nil, fmt.Errorf("input directory %s does not contain supported media files", inputPath)
+			}
+		}
+
+		for _, candidate := range candidates {
+			candidatePath, err := a.FS.Abs(filepath.Clean(candidate))
+			if err != nil {
+				return nil, fmt.Errorf("resolve media path %q: %w", candidate, err)
+			}
+			if _, ok := seen[candidatePath]; ok {
+				continue
+			}
+			seen[candidatePath] = struct{}{}
+			files = append(files, candidatePath)
+		}
+	}
+
+	return files, nil
+}
+
+func (a *Application) resolveCacheRoot() (string, error) {
+	cacheRoot := strings.TrimSpace(a.CacheRoot)
+	if cacheRoot == "" {
+		userCacheDir, err := a.FS.UserCacheDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve user cache directory: %w", err)
+		}
+		cacheRoot = filepath.Join(userCacheDir, "whisper-cli")
+	}
+
+	absolutePath, err := a.FS.Abs(filepath.Clean(cacheRoot))
+	if err != nil {
+		return "", fmt.Errorf("resolve cache root: %w", err)
+	}
+	return absolutePath, nil
+}
+
+func validatePublicPathCollisions(items []batchItem, outputs domain.ArtifactSet) error {
+	owners := map[string]string{}
+	for _, item := range items {
+		layout := output.Layout{
+			CacheDir:  item.cacheDir,
+			PublicDir: item.publicDir,
+			Stem:      item.stem,
+		}
+		for _, artifactPath := range output.PublicArtifactPaths(layout, outputs) {
+			if owner, ok := owners[artifactPath]; ok {
+				return fmt.Errorf(
+					"public output path collision: inputs %q and %q both write %s",
+					owner,
+					item.inputPath,
+					artifactPath,
+				)
+			}
+			owners[artifactPath] = item.inputPath
+		}
+	}
+	return nil
+}
+
+func cacheKey(inputPath string) string {
+	sum := sha256.Sum256([]byte(inputPath))
+	return fmt.Sprintf("%x", sum)
 }
 
 func (a *Application) providerForRun(ctx context.Context, providerName domain.Provider) (provider.Client, error) {
@@ -162,13 +288,6 @@ func normalizeConfigAgainstCapabilities(client provider.Client, cfg config.Confi
 	if cfg.Outputs.Enabled(domain.ArtifactDiarized) && !caps.SupportsDiarization {
 		return config.Config{}, fmt.Errorf("model %s does not support diarization", cfg.Model)
 	}
-	if caps.SupportsDiarization && !cfg.OutputsExplicit && len(cfg.Outputs.Sorted()) == 0 {
-		if cfg.Outputs == nil {
-			cfg.Outputs = domain.ArtifactSet{}
-		}
-		cfg.Outputs[domain.ArtifactDiarized] = true
-	}
-
 	return cfg, nil
 }
 
@@ -176,31 +295,29 @@ func (a *Application) processFile(
 	ctx context.Context,
 	client provider.Client,
 	cfg config.Config,
-	inputPath string,
-	outputRoot string,
+	item batchItem,
 ) error {
-	baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
-	fileOutputDir := filepath.Join(outputRoot, baseName)
-	fileWorkDir := filepath.Join(fileOutputDir, "_work")
-
 	a.Logger.Info().
-		Str("input", inputPath).
-		Str("output_dir", fileOutputDir).
-		Str("work_dir", fileWorkDir).
+		Str("input", item.inputPath).
+		Str("public_dir", item.publicDir).
+		Str("cache_dir", item.cacheDir).
 		Msg("processing input file")
 
-	if err := a.FS.MkdirAll(fileOutputDir, 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
+	if err := a.FS.RemoveAll(item.cacheDir); err != nil {
+		return fmt.Errorf("reset input cache: %w", err)
+	}
+	if err := a.FS.MkdirAll(item.workDir, 0o700); err != nil {
+		return fmt.Errorf("create work directory: %w", err)
 	}
 
-	prepared, err := a.Audio.PrepareInput(ctx, inputPath, fileWorkDir)
+	prepared, err := a.Audio.PrepareInput(ctx, item.inputPath, item.workDir)
 	if err != nil {
 		return err
 	}
 	logEvent := a.Logger.Info().
 		Str("input", prepared.OriginalPath).
 		Str("chunk_source", prepared.ChunkSourcePath).
-		Str("work_dir", fileWorkDir)
+		Str("work_dir", item.workDir)
 	if prepared.Converted {
 		logEvent.Msg("converted input to m4a for preprocessing")
 	} else {
@@ -210,17 +327,17 @@ func (a *Application) processFile(
 	a.Logger.Info().
 		Str("input", prepared.OriginalPath).
 		Str("chunk_source", prepared.ChunkSourcePath).
-		Str("work_dir", fileWorkDir).
+		Str("work_dir", item.workDir).
 		Int("chunk_seconds", cfg.ChunkSeconds).
 		Msg("preparing chunks")
 
-	chunks, err := a.Audio.PrepareChunks(ctx, prepared.ChunkSourcePath, fileWorkDir, cfg.ChunkSeconds)
+	chunks, err := a.Audio.PrepareChunks(ctx, prepared.ChunkSourcePath, item.workDir, cfg.ChunkSeconds)
 	if err != nil {
 		return err
 	}
 	a.Logger.Info().
 		Str("input", prepared.OriginalPath).
-		Str("work_dir", fileWorkDir).
+		Str("work_dir", item.workDir).
 		Int("chunks", len(chunks)).
 		Msg("prepared chunks")
 
@@ -229,12 +346,22 @@ func (a *Application) processFile(
 		return err
 	}
 
-	if err := output.WriteArtifacts(a.FS, fileOutputDir, transcript, cfg.Outputs, rawArtifacts); err != nil {
+	if err := output.WriteArtifacts(a.FS, output.WriteRequest{
+		Layout: output.Layout{
+			CacheDir:  item.cacheDir,
+			PublicDir: item.publicDir,
+			Stem:      item.stem,
+		},
+		Transcript:   transcript,
+		Outputs:      cfg.Outputs,
+		RawArtifacts: rawArtifacts,
+	}); err != nil {
 		return err
 	}
 	a.Logger.Info().
 		Str("input", prepared.OriginalPath).
-		Str("output_dir", fileOutputDir).
+		Str("public_file", filepath.Join(item.publicDir, item.stem+".txt")).
+		Str("cache_dir", item.cacheDir).
 		Msg("wrote transcript artifacts")
 	return nil
 }
