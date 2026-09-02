@@ -76,7 +76,7 @@ func (cliAudioPipeline) PrepareChunks(_ context.Context, inputFile string, _ str
 func testApplication() *app.Application {
 	return &app.Application{
 		Registry: provider.NewRegistry(
-			fakeClient{name: domain.ProviderOpenAI, models: []string{"gpt-4o-transcribe", "whisper-1"}},
+			fakeClient{name: domain.ProviderOpenAI, models: []string{"gpt-transcribe"}},
 			fakeClient{name: domain.ProviderGroq, models: []string{"whisper-large-v3-turbo"}},
 			provider.NewBlockedClient(domain.ProviderOpenRouter, provider.ErrOpenRouterPlanned),
 		),

@@ -172,7 +172,7 @@ func TestApplicationRunWritesDefaultOutputBesideInputAndResetsCache(t *testing.T
 	client := fakeProvider{
 		name: domain.ProviderOpenAI,
 		capabilities: map[string]domain.Capabilities{
-			"gpt-4o-transcribe": {},
+			"gpt-transcribe": {},
 		},
 		responses: map[string]provider.Response{
 			"chunk-0": {Transcript: domain.Transcript{Text: "new transcript"}},
@@ -190,7 +190,7 @@ func TestApplicationRunWritesDefaultOutputBesideInputAndResetsCache(t *testing.T
 	err := application.Run(context.Background(), config.Config{
 		Inputs:       []string{input},
 		Provider:     domain.ProviderOpenAI,
-		Model:        "gpt-4o-transcribe",
+		Model:        "gpt-transcribe",
 		Outputs:      domain.DefaultArtifacts(),
 		ChunkSeconds: 600,
 		Concurrency:  1,
@@ -239,7 +239,7 @@ func TestApplicationRunProcessesInputsSequentiallyAndContinuesAfterError(t *test
 	client := fakeProvider{
 		name: domain.ProviderOpenAI,
 		capabilities: map[string]domain.Capabilities{
-			"gpt-4o-transcribe": {},
+			"gpt-transcribe": {},
 		},
 		transcribeFunc: func(_ context.Context, req provider.Request) (provider.Response, error) {
 			transcribed = append(transcribed, req.FilePath)
@@ -261,7 +261,7 @@ func TestApplicationRunProcessesInputsSequentiallyAndContinuesAfterError(t *test
 	err := application.Run(context.Background(), config.Config{
 		Inputs:       []string{firstInput, secondInput},
 		Provider:     domain.ProviderOpenAI,
-		Model:        "gpt-4o-transcribe",
+		Model:        "gpt-transcribe",
 		Outputs:      domain.DefaultArtifacts(),
 		ChunkSeconds: 600,
 		Concurrency:  1,
@@ -307,7 +307,7 @@ func TestApplicationRunRejectsPublicOutputCollisionBeforeTranscription(t *testin
 	client := fakeProvider{
 		name: domain.ProviderOpenAI,
 		capabilities: map[string]domain.Capabilities{
-			"gpt-4o-transcribe": {},
+			"gpt-transcribe": {},
 		},
 		transcribeFunc: func(context.Context, provider.Request) (provider.Response, error) {
 			transcribeCalls++
@@ -327,7 +327,7 @@ func TestApplicationRunRejectsPublicOutputCollisionBeforeTranscription(t *testin
 		Inputs:       []string{firstInput, secondInput},
 		OutputDir:    filepath.Join(dir, "out"),
 		Provider:     domain.ProviderOpenAI,
-		Model:        "gpt-4o-transcribe",
+		Model:        "gpt-transcribe",
 		Outputs:      domain.DefaultArtifacts(),
 		ChunkSeconds: 600,
 		Concurrency:  1,
@@ -410,11 +410,16 @@ func TestApplicationRunResolvesOpenAIKeyBeforeProviderPreflight(t *testing.T) {
 
 	var order []string
 	app := &Application{
-		FS:       fsx.OS{},
-		Audio:    &fakeAudioPipeline{},
-		Registry: provider.NewRegistry(fakeProvider{name: domain.ProviderOpenAI}),
-		Logger:   zerolog.New(io.Discard),
-		Env:      staticEnv{},
+		FS:    fsx.OS{},
+		Audio: &fakeAudioPipeline{},
+		Registry: provider.NewRegistry(fakeProvider{
+			name: domain.ProviderOpenAI,
+			capabilities: map[string]domain.Capabilities{
+				"gpt-transcribe": {},
+			},
+		}),
+		Logger: zerolog.New(io.Discard),
+		Env:    staticEnv{},
 		OpenAIKeyResolver: fakeKeyResolver{
 			key: "resolved-key",
 			onResolve: func() {
@@ -438,13 +443,63 @@ func TestApplicationRunResolvesOpenAIKeyBeforeProviderPreflight(t *testing.T) {
 
 	err := app.Run(context.Background(), config.Config{
 		Provider: domain.ProviderOpenAI,
-		Model:    "whisper-1",
+		Model:    "gpt-transcribe",
 	})
 	if err == nil {
 		t.Fatal("expected preflight error")
 	}
 	if strings.Join(order, ",") != "resolve,factory,preflight" {
 		t.Fatalf("order = %v, want resolve,factory,preflight", order)
+	}
+}
+
+func TestApplicationRunRejectsRemovedOpenAIModelBeforeRuntimePreflight(t *testing.T) {
+	t.Parallel()
+
+	resolverCalls := 0
+	transcribeCalls := 0
+	audioPipeline := &fakeAudioPipeline{}
+	application := &Application{
+		FS:    fsx.OS{},
+		Audio: audioPipeline,
+		Registry: provider.NewRegistry(fakeProvider{
+			name: domain.ProviderOpenAI,
+			capabilities: map[string]domain.Capabilities{
+				"gpt-transcribe": {},
+			},
+			transcribeFunc: func(context.Context, provider.Request) (provider.Response, error) {
+				transcribeCalls++
+				return provider.Response{}, nil
+			},
+		}),
+		Logger: zerolog.New(io.Discard),
+		OpenAIKeyResolver: fakeKeyResolver{
+			key: "openai-key",
+			onResolve: func() {
+				resolverCalls++
+			},
+		},
+		OpenAIProviderFactory: func(string) provider.Client {
+			t.Fatal("OpenAI provider factory must not run for unsupported model")
+			return nil
+		},
+	}
+
+	err := application.Run(context.Background(), config.Config{
+		Provider: domain.ProviderOpenAI,
+		Model:    "gpt-4o-transcribe",
+	})
+	if err == nil || !strings.Contains(err.Error(), "model gpt-4o-transcribe is not supported by provider openai") {
+		t.Fatalf("Run error = %v", err)
+	}
+	if resolverCalls != 0 {
+		t.Fatalf("resolver calls = %d, want 0", resolverCalls)
+	}
+	if len(audioPipeline.callOrder) != 0 {
+		t.Fatalf("audio calls = %v, want none", audioPipeline.callOrder)
+	}
+	if transcribeCalls != 0 {
+		t.Fatalf("transcribe calls = %d, want 0", transcribeCalls)
 	}
 }
 
@@ -458,6 +513,9 @@ func TestApplicationRunKeepsGroqOnRegisteredProviderPath(t *testing.T) {
 		Registry: provider.NewRegistry(fakeProvider{
 			name:         domain.ProviderGroq,
 			preflightErr: errors.New("groq preflight"),
+			capabilities: map[string]domain.Capabilities{
+				"whisper-large-v3-turbo": {},
+			},
 		}),
 		Logger: zerolog.New(io.Discard),
 		Env:    staticEnv{},
@@ -512,9 +570,9 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 	}
 
 	client := fakeProvider{
-		name: domain.ProviderOpenAI,
+		name: domain.ProviderGroq,
 		capabilities: map[string]domain.Capabilities{
-			"whisper-1": {
+			"whisper-large-v3": {
 				SupportsPrompt:            true,
 				SupportsSegmentTimestamps: true,
 				SupportsSRT:               true,
@@ -555,8 +613,8 @@ func TestApplicationRunWritesMergedArtifactsInChunkOrder(t *testing.T) {
 	err := app.Run(context.Background(), config.Config{
 		Inputs:       []string{input},
 		OutputDir:    outputRoot,
-		Provider:     domain.ProviderOpenAI,
-		Model:        "whisper-1",
+		Provider:     domain.ProviderGroq,
+		Model:        "whisper-large-v3",
 		Outputs:      domain.ArtifactSet{domain.ArtifactTimestamps: true, domain.ArtifactRaw: true},
 		ChunkSeconds: 600,
 		Concurrency:  1,
@@ -656,7 +714,7 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 		Registry: provider.NewRegistry(fakeProvider{
 			name: domain.ProviderOpenAI,
 			capabilities: map[string]domain.Capabilities{
-				"gpt-4o-transcribe": {},
+				"gpt-transcribe": {},
 			},
 			responses: map[string]provider.Response{
 				"chunk-0": {
@@ -676,7 +734,7 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 		Inputs:       []string{input},
 		OutputDir:    outputRoot,
 		Provider:     domain.ProviderOpenAI,
-		Model:        "gpt-4o-transcribe",
+		Model:        "gpt-transcribe",
 		Outputs:      domain.ArtifactSet{domain.ArtifactTimestamps: true},
 		ChunkSeconds: 600,
 		Concurrency:  1,
@@ -699,149 +757,6 @@ func TestApplicationRunDisablesUnsupportedTimestampArtifacts(t *testing.T) {
 	}
 }
 
-func TestApplicationRunDoesNotPublishDiarizedArtifactByDefault(t *testing.T) {
-	t.Parallel()
-
-	logger := zerolog.New(io.Discard)
-	dir := t.TempDir()
-	input := filepath.Join(dir, "input.m4a")
-	if err := os.WriteFile(input, []byte("x"), 0o644); err != nil {
-		t.Fatalf("write input: %v", err)
-	}
-
-	audioPipeline := &fakeAudioPipeline{
-		chunks: []audio.Chunk{
-			{Number: 0, Path: "chunk-0", Offset: 0},
-		},
-	}
-	app := &Application{
-		FS:    fsx.OS{},
-		Audio: audioPipeline,
-		Registry: provider.NewRegistry(fakeProvider{
-			name: domain.ProviderOpenAI,
-			capabilities: map[string]domain.Capabilities{
-				"gpt-4o-transcribe-diarize": {
-					SupportsDiarization: true,
-				},
-			},
-			responses: map[string]provider.Response{
-				"chunk-0": {
-					Transcript: domain.Transcript{
-						Text: "speaker transcript",
-						SpeakerSegments: []domain.SpeakerSegment{
-							{Start: 0, End: 1, Speaker: "speaker_0", Text: "speaker transcript"},
-						},
-					},
-				},
-			},
-		}),
-		Logger:    logger,
-		Env:       config.OSEnv{},
-		CacheRoot: filepath.Join(dir, "cache"),
-	}
-
-	outputRoot := filepath.Join(dir, "out")
-	err := app.Run(context.Background(), config.Config{
-		Inputs:       []string{input},
-		OutputDir:    outputRoot,
-		Provider:     domain.ProviderOpenAI,
-		Model:        "gpt-4o-transcribe-diarize",
-		Outputs:      domain.DefaultArtifacts(),
-		ChunkSeconds: 600,
-		Concurrency:  1,
-		Language:     "ru",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(outputRoot, "input.timestamps.txt")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected timestamps.txt to be skipped, stat err = %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(outputRoot, "input.diarized.json")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected no default diarized.json, stat err = %v", err)
-	}
-	text, err := os.ReadFile(filepath.Join(outputRoot, "input.txt"))
-	if err != nil {
-		t.Fatalf("read input.txt: %v", err)
-	}
-	if strings.TrimSpace(string(text)) != "speaker transcript" {
-		t.Fatalf("unexpected input.txt: %q", string(text))
-	}
-}
-
-func TestNormalizeConfigRespectsExplicitOutputsForDiarizeModel(t *testing.T) {
-	t.Parallel()
-
-	logger := zerolog.New(io.Discard)
-	client := fakeProvider{
-		name: domain.ProviderOpenAI,
-		capabilities: map[string]domain.Capabilities{
-			"gpt-4o-transcribe-diarize": {
-				SupportsDiarization: true,
-			},
-		},
-	}
-
-	tests := []struct {
-		name    string
-		outputs string
-		want    domain.ArtifactKind
-	}{
-		{
-			name:    "env none",
-			outputs: "none",
-		},
-		{
-			name:    "flag raw",
-			outputs: "raw",
-			want:    domain.ArtifactRaw,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			overrides := config.Overrides{}
-			overrides.Input.SetValue("input.m4a")
-			if tt.name == "flag raw" {
-				overrides.Outputs.SetValue(tt.outputs)
-			}
-			env := mapEnvForApp(tt.name, tt.outputs)
-			cfg, err := config.Resolve(overrides, env)
-			if err != nil {
-				t.Fatalf("Resolve returned error: %v", err)
-			}
-			cfg.Model = "gpt-4o-transcribe-diarize"
-
-			got, err := normalizeConfigAgainstCapabilities(client, cfg, logger)
-			if err != nil {
-				t.Fatalf("normalizeConfigAgainstCapabilities returned error: %v", err)
-			}
-			if got.Outputs.Enabled(domain.ArtifactDiarized) {
-				t.Fatalf("outputs = %#v, did not want auto diarized for explicit outputs", got.Outputs)
-			}
-			if tt.want != "" && !got.Outputs.Enabled(tt.want) {
-				t.Fatalf("outputs = %#v, want %s enabled", got.Outputs, tt.want)
-			}
-			if tt.want == "" && len(got.Outputs.Sorted()) != 0 {
-				t.Fatalf("outputs = %#v, want none", got.Outputs)
-			}
-		})
-	}
-}
-
-func mapEnvForApp(name string, outputs string) config.EnvSource {
-	if name == "env none" {
-		return staticEnv{
-			"WHISPER_CLI_INPUT":   "input.m4a",
-			"WHISPER_CLI_OUTPUTS": outputs,
-		}
-	}
-	return staticEnv{}
-}
-
 func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 	t.Parallel()
 
@@ -858,7 +773,7 @@ func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 		Registry: provider.NewRegistry(fakeProvider{
 			name: domain.ProviderOpenAI,
 			capabilities: map[string]domain.Capabilities{
-				"gpt-4o-transcribe": {},
+				"gpt-transcribe": {},
 			},
 		}),
 		Logger: logger,
@@ -869,7 +784,7 @@ func TestApplicationRunRejectsUnsupportedSRTArtifacts(t *testing.T) {
 		Inputs:       []string{input},
 		OutputDir:    "output",
 		Provider:     domain.ProviderOpenAI,
-		Model:        "gpt-4o-transcribe",
+		Model:        "gpt-transcribe",
 		Outputs:      domain.ArtifactSet{domain.ArtifactSRT: true},
 		ChunkSeconds: 600,
 		Concurrency:  1,
@@ -900,12 +815,7 @@ func TestApplicationRunRejectsEmptyMediaDirectory(t *testing.T) {
 		Registry: provider.NewRegistry(fakeProvider{
 			name: domain.ProviderOpenAI,
 			capabilities: map[string]domain.Capabilities{
-				"whisper-1": {
-					SupportsPrompt:            true,
-					SupportsSegmentTimestamps: true,
-					SupportsSRT:               true,
-					SupportsVTT:               true,
-				},
+				"gpt-transcribe": {SupportsPrompt: true},
 			},
 		}),
 		Logger: logger,
@@ -916,7 +826,7 @@ func TestApplicationRunRejectsEmptyMediaDirectory(t *testing.T) {
 		Inputs:       []string{inputDir},
 		OutputDir:    "output",
 		Provider:     domain.ProviderOpenAI,
-		Model:        "whisper-1",
+		Model:        "gpt-transcribe",
 		Outputs:      domain.DefaultArtifacts(),
 		ChunkSeconds: 600,
 		Concurrency:  1,

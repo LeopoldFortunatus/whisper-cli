@@ -9,7 +9,7 @@ BASH_COMPLETION_DIR ?= $(HOME)/.local/share/bash-completion/completions
 GOFILES := $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 GOLANGCI_LINT ?= golangci-lint
 
-.PHONY: build install install-bash-completion fmt fmt-check lint test vet docs-check ci test-live-openai test-live-openai-diarize test-live-groq
+.PHONY: build install install-bash-completion fmt fmt-check lint test vet docs-check ci test-live-openai test-live-groq
 
 build:
 	mkdir -p "$(BUILD_DIR)"
@@ -46,10 +46,6 @@ ci: fmt-check lint vet test docs-check
 test-live-openai:
 	@test -n "$(LIVE_AUDIO_FILE)" || (echo "LIVE_AUDIO_FILE is required"; exit 1)
 	WHISPER_CLI_RUN_LIVE=1 WHISPER_CLI_LIVE_AUDIO="$(LIVE_AUDIO_FILE)" GOFLAGS=$(GOFLAGS) $(GO) test ./internal/provider/openaiadapter -run TestLiveOpenAITranscription -count=1
-
-test-live-openai-diarize:
-	@test -n "$(LIVE_AUDIO_FILE)" || (echo "LIVE_AUDIO_FILE is required"; exit 1)
-	WHISPER_CLI_RUN_LIVE=1 WHISPER_CLI_LIVE_AUDIO="$(LIVE_AUDIO_FILE)" GOFLAGS=$(GOFLAGS) $(GO) test ./internal/provider/openaiadapter -run TestLiveOpenAIDiarization -count=1
 
 test-live-groq:
 	@test -n "$(LIVE_AUDIO_FILE)" || (echo "LIVE_AUDIO_FILE is required"; exit 1)

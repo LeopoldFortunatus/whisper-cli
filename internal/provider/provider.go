@@ -10,12 +10,11 @@ import (
 )
 
 type Request struct {
-	FilePath        string
-	Model           string
-	Language        string
-	Prompt          string
-	WantDiarization bool
-	WantRaw         bool
+	FilePath string
+	Model    string
+	Language string
+	Prompt   string
+	WantRaw  bool
 }
 
 type Response struct {

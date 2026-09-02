@@ -1,7 +1,7 @@
 # Дорожная карта
 
 Владелец: Platform Team
-Проверено: 2026-08-19
+Проверено: 2026-09-02
 
 ## Done
 
@@ -19,7 +19,7 @@
 
 ### RM-004 OpenAI Capability Registry
 - формализован `model capability gating`
-- сохранён `path` для `gpt-4o-transcribe-diarize`
+- после RM-014 registry содержит только актуальный `gpt-transcribe`
 
 ### RM-005 Groq Support
 - добавлена поддержка `whisper-large-v3` и `whisper-large-v3-turbo`
@@ -28,7 +28,8 @@
 - `timestamps`, `srt`, `vtt` включаются только для `capability-compatible models`
 
 ### RM-007 Diarization
-- добавлен `provider-native diarization path` через OpenAI
+- исторически был добавлен `provider-native diarization path` через OpenAI
+- в RM-014 этот path полностью удалён вместе с public artifact и live target ради единственного OpenAI default
 
 ### RM-009 Auto-Convert Common Audio And Video Formats To M4A
 - поддерживаемые non-`m4a` аудио- и видеоформаты автоматически нормализуются в `m4a` через явный `preprocessing step`
@@ -52,6 +53,12 @@
 - `whisper-cli --input *.m4a` принимает shell-expanded ordered batch и обрабатывает files последовательно
 - default public output сокращён до `<source-stem>.txt`, а canonical JSON и work artifacts перенесены в системный cache
 - public output collisions проверяются до transcription requests
+
+### RM-014 GPT Transcribe As The Only OpenAI Model
+- `gpt-transcribe` стал единственной поддерживаемой и default-моделью OpenAI
+- `--language` сериализуется для OpenAI как один `languages[]`, а singular API field не отправляется
+- старые OpenAI model IDs отклоняются явно без silent migration
+- diarization-контур удалён; Groq models и generic provider/model abstraction сохранены
 
 ## In Progress
 

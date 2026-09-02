@@ -36,9 +36,6 @@ func PublicArtifactPaths(layout Layout, outputs domain.ArtifactSet) []string {
 	if outputs.Enabled(domain.ArtifactVTT) {
 		paths = append(paths, filepath.Join(layout.PublicDir, layout.Stem+".vtt"))
 	}
-	if outputs.Enabled(domain.ArtifactDiarized) {
-		paths = append(paths, filepath.Join(layout.PublicDir, layout.Stem+".diarized.json"))
-	}
 	if outputs.Enabled(domain.ArtifactRaw) {
 		paths = append(paths, filepath.Join(layout.PublicDir, layout.Stem+".raw.json"))
 	}
@@ -103,27 +100,6 @@ func WriteArtifacts(fs fsx.FS, request WriteRequest) error {
 		path := filepath.Join(request.Layout.PublicDir, request.Layout.Stem+".vtt")
 		if err := fs.WriteFile(path, []byte(content), 0o644); err != nil {
 			return fmt.Errorf("write transcript.vtt: %w", err)
-		}
-	}
-
-	if request.Outputs.Enabled(domain.ArtifactDiarized) {
-		if len(request.Transcript.SpeakerSegments) == 0 {
-			return fmt.Errorf("diarized output requested but speaker segments are empty")
-		}
-		payload := map[string]any{
-			"provider":         request.Transcript.Provider,
-			"model":            request.Transcript.Model,
-			"language":         request.Transcript.Language,
-			"text":             request.Transcript.Text,
-			"speaker_segments": request.Transcript.SpeakerSegments,
-		}
-		content, err := json.MarshalIndent(payload, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshal diarized.json: %w", err)
-		}
-		path := filepath.Join(request.Layout.PublicDir, request.Layout.Stem+".diarized.json")
-		if err := fs.WriteFile(path, content, 0o644); err != nil {
-			return fmt.Errorf("write diarized.json: %w", err)
 		}
 	}
 

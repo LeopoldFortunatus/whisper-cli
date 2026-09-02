@@ -17,23 +17,19 @@ func TestWriteArtifactsWritesExpectedFiles(t *testing.T) {
 	cacheDir := filepath.Join(dir, "cache")
 	publicDir := filepath.Join(dir, "public")
 	transcript := domain.Transcript{
-		Provider: domain.ProviderOpenAI,
-		Model:    "whisper-1",
+		Provider: domain.ProviderGroq,
+		Model:    "whisper-large-v3",
 		Language: "ru",
 		Text:     "first\nsecond",
 		Segments: []domain.Segment{
 			{Start: 0, End: 1.2, Text: "first"},
 			{Start: 2, End: 3.5, Text: "second"},
 		},
-		SpeakerSegments: []domain.SpeakerSegment{
-			{Start: 0, End: 1.2, Speaker: "speaker_0", Text: "first"},
-		},
 	}
 	outputs := domain.ArtifactSet{
 		domain.ArtifactTimestamps: true,
 		domain.ArtifactSRT:        true,
 		domain.ArtifactVTT:        true,
-		domain.ArtifactDiarized:   true,
 		domain.ArtifactRaw:        true,
 	}
 
@@ -59,7 +55,6 @@ func TestWriteArtifactsWritesExpectedFiles(t *testing.T) {
 		"lecture.timestamps.txt",
 		"lecture.srt",
 		"lecture.vtt",
-		"lecture.diarized.json",
 		"lecture.raw.json",
 	} {
 		if _, err := os.Stat(filepath.Join(publicDir, name)); err != nil {
@@ -109,7 +104,7 @@ func TestWriteArtifactsDefaultWritesOnlyPublicTextAndCachedJSON(t *testing.T) {
 		},
 		Transcript: domain.Transcript{
 			Provider: domain.ProviderOpenAI,
-			Model:    "gpt-4o-transcribe",
+			Model:    "gpt-transcribe",
 			Text:     "new transcript",
 		},
 		Outputs: domain.DefaultArtifacts(),
@@ -153,7 +148,6 @@ func TestPublicArtifactPathsUsesStemPrefixedNames(t *testing.T) {
 		domain.ArtifactTimestamps: true,
 		domain.ArtifactSRT:        true,
 		domain.ArtifactVTT:        true,
-		domain.ArtifactDiarized:   true,
 		domain.ArtifactRaw:        true,
 	}
 
@@ -163,7 +157,6 @@ func TestPublicArtifactPathsUsesStemPrefixedNames(t *testing.T) {
 		"/output/lecture.timestamps.txt",
 		"/output/lecture.srt",
 		"/output/lecture.vtt",
-		"/output/lecture.diarized.json",
 		"/output/lecture.raw.json",
 	}
 	if strings.Join(paths, "\n") != strings.Join(want, "\n") {

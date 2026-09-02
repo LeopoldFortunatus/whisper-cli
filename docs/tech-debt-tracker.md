@@ -1,7 +1,7 @@
 # Реестр техдолга
 
 Владелец: Platform Team
-Проверено: 2026-08-19
+Проверено: 2026-09-02
 
 ## Active
 
@@ -39,7 +39,7 @@
 - Решение: batch manifest вычисляет все stem-prefixed public paths до транскрипции и отклоняет разные inputs, претендующие на один destination; cache directories разделены полным SHA-256 от absolute input path.
 
 ### TD-010 Локальный `make ci` сломан устаревшим default-model тестом
-- Решение: `TestResolveUsesDefaultsWithoutEnv` обновлён под актуальный OpenAI default `gpt-4o-transcribe`, а пользовательская документация явно фиксирует default `provider=openai` и `model=gpt-4o-transcribe`.
+- Решение: `TestResolveUsesDefaultsWithoutEnv` и пользовательская документация проверяют актуальный default `provider=openai` и `model=gpt-transcribe`.
 
 ### TD-009 CLI и bash completion всё ещё на hand-rolled implementation, а legacy YAML расширяет runtime surface
 - Решение: `command tree`, `help` и `bash completion` переведены на `cobra`, `legacy YAML config` удалён, целевой контракт зафиксирован как `flags > env > defaults`, а для `help`, `parse failures` и `completion bash` добавлены `command/integration tests`.

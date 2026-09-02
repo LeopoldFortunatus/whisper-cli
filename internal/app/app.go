@@ -67,6 +67,15 @@ func NewDefault() *Application {
 }
 
 func (a *Application) Run(ctx context.Context, cfg config.Config) error {
+	capabilityClient, err := a.Registry.Provider(cfg.Provider)
+	if err != nil {
+		return err
+	}
+	cfg, err = normalizeConfigAgainstCapabilities(capabilityClient, cfg, a.Logger)
+	if err != nil {
+		return err
+	}
+
 	client, err := a.providerForRun(ctx, cfg.Provider)
 	if err != nil {
 		return err
@@ -75,10 +84,6 @@ func (a *Application) Run(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 	if err := a.Audio.EnsureBinaries(); err != nil {
-		return err
-	}
-	cfg, err = normalizeConfigAgainstCapabilities(client, cfg, a.Logger)
-	if err != nil {
 		return err
 	}
 
@@ -285,9 +290,6 @@ func normalizeConfigAgainstCapabilities(client provider.Client, cfg config.Confi
 	if cfg.Outputs.Enabled(domain.ArtifactVTT) && !caps.SupportsVTT {
 		return config.Config{}, fmt.Errorf("model %s does not support vtt artifacts", cfg.Model)
 	}
-	if cfg.Outputs.Enabled(domain.ArtifactDiarized) && !caps.SupportsDiarization {
-		return config.Config{}, fmt.Errorf("model %s does not support diarization", cfg.Model)
-	}
 	return cfg, nil
 }
 
@@ -404,12 +406,11 @@ func (a *Application) transcribeChunks(
 					Msg("transcribing chunk")
 
 				response, err := client.Transcribe(ctx, provider.Request{
-					FilePath:        chunk.Path,
-					Model:           cfg.Model,
-					Language:        cfg.Language,
-					Prompt:          cfg.Prompt,
-					WantDiarization: cfg.Outputs.Enabled(domain.ArtifactDiarized),
-					WantRaw:         cfg.Outputs.Enabled(domain.ArtifactRaw),
+					FilePath: chunk.Path,
+					Model:    cfg.Model,
+					Language: cfg.Language,
+					Prompt:   cfg.Prompt,
+					WantRaw:  cfg.Outputs.Enabled(domain.ArtifactRaw),
 				})
 				results <- chunkResult{chunk: chunk, response: response, err: err}
 			}
@@ -457,7 +458,6 @@ func (a *Application) transcribeChunks(
 		}
 
 		combined.Segments = append(combined.Segments, domain.ShiftSegments(piece.Segments, item.chunk.Offset)...)
-		combined.SpeakerSegments = append(combined.SpeakerSegments, domain.ShiftSpeakerSegments(piece.SpeakerSegments, item.chunk.Offset)...)
 
 		if cfg.Outputs.Enabled(domain.ArtifactRaw) && len(item.response.Raw) > 0 {
 			rawItems = append(rawItems, item.response.Raw)
@@ -471,9 +471,5 @@ func (a *Application) transcribeChunks(
 			return domain.Transcript{}, nil, errors.New("requested timestamp-based artifacts but provider returned no segments")
 		}
 	}
-	if cfg.Outputs.Enabled(domain.ArtifactDiarized) && len(combined.SpeakerSegments) == 0 {
-		return domain.Transcript{}, nil, errors.New("requested diarized artifact but provider returned no speaker segments")
-	}
-
 	return combined, rawItems, nil
 }

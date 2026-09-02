@@ -20,7 +20,6 @@ const (
 	ArtifactTimestamps ArtifactKind = "timestamps"
 	ArtifactSRT        ArtifactKind = "srt"
 	ArtifactVTT        ArtifactKind = "vtt"
-	ArtifactDiarized   ArtifactKind = "diarized"
 	ArtifactRaw        ArtifactKind = "raw"
 )
 
@@ -28,7 +27,6 @@ var knownArtifacts = map[ArtifactKind]struct{}{
 	ArtifactTimestamps: {},
 	ArtifactSRT:        {},
 	ArtifactVTT:        {},
-	ArtifactDiarized:   {},
 	ArtifactRaw:        {},
 }
 
@@ -88,30 +86,21 @@ type Capabilities struct {
 	SupportsWordTimestamps    bool
 	SupportsSRT               bool
 	SupportsVTT               bool
-	SupportsDiarization       bool
 }
 
 type Transcript struct {
-	Provider        Provider         `json:"provider"`
-	Model           string           `json:"model"`
-	Source          string           `json:"source,omitempty"`
-	Language        string           `json:"language,omitempty"`
-	Text            string           `json:"text"`
-	Segments        []Segment        `json:"segments,omitempty"`
-	SpeakerSegments []SpeakerSegment `json:"speaker_segments,omitempty"`
+	Provider Provider  `json:"provider"`
+	Model    string    `json:"model"`
+	Source   string    `json:"source,omitempty"`
+	Language string    `json:"language,omitempty"`
+	Text     string    `json:"text"`
+	Segments []Segment `json:"segments,omitempty"`
 }
 
 type Segment struct {
 	Start float64 `json:"start"`
 	End   float64 `json:"end"`
 	Text  string  `json:"text"`
-}
-
-type SpeakerSegment struct {
-	Start   float64 `json:"start"`
-	End     float64 `json:"end"`
-	Speaker string  `json:"speaker"`
-	Text    string  `json:"text"`
 }
 
 func ShiftSegments(src []Segment, offset float64) []Segment {
@@ -129,37 +118,9 @@ func ShiftSegments(src []Segment, offset float64) []Segment {
 	}
 	return shifted
 }
-
-func ShiftSpeakerSegments(src []SpeakerSegment, offset float64) []SpeakerSegment {
-	if len(src) == 0 {
-		return nil
-	}
-
-	shifted := make([]SpeakerSegment, 0, len(src))
-	for _, segment := range src {
-		shifted = append(shifted, SpeakerSegment{
-			Start:   segment.Start + offset,
-			End:     segment.End + offset,
-			Speaker: segment.Speaker,
-			Text:    segment.Text,
-		})
-	}
-	return shifted
-}
-
 func (t Transcript) PlainText() string {
 	if strings.TrimSpace(t.Text) != "" {
 		return strings.TrimSpace(t.Text)
-	}
-
-	if len(t.SpeakerSegments) > 0 {
-		var parts []string
-		for _, segment := range t.SpeakerSegments {
-			if text := strings.TrimSpace(segment.Text); text != "" {
-				parts = append(parts, text)
-			}
-		}
-		return strings.Join(parts, "\n")
 	}
 
 	if len(t.Segments) > 0 {

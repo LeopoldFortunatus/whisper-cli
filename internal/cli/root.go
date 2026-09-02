@@ -68,7 +68,7 @@ func NewRootCommand(application *app.Application) *cobra.Command {
 	flags.Var(&opts.overrides.Input, "input", "Input media file or directory")
 	flags.Var(&opts.overrides.OutputDir, "output-dir", "Output directory root")
 	flags.Var(&opts.overrides.Language, "language", "Language code")
-	flags.Var(&opts.overrides.Outputs, "outputs", "Additional artifacts: timestamps,srt,vtt,diarized,raw or none")
+	flags.Var(&opts.overrides.Outputs, "outputs", "Additional artifacts: timestamps,srt,vtt,raw or none")
 	flags.Var(&opts.overrides.ChunkSeconds, "chunk-seconds", "Chunk size in seconds")
 	flags.Var(&opts.overrides.Concurrency, "concurrency", "Number of worker goroutines")
 	flags.Var(&opts.overrides.Prompt, "prompt", "Prompt for supported models")

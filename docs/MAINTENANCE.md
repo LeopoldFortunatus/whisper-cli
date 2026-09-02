@@ -1,7 +1,7 @@
 # Эксплуатация
 
 Владелец: Platform Team
-Проверено: 2026-08-19
+Проверено: 2026-09-02
 
 ## Локальный build contract
 
@@ -19,6 +19,7 @@
 - OpenAI API key в обычном Linux runtime резолвится через Secret Service: `secret-tool lookup application whisper-cli provider openai kind api-key`
 - `OPENAI_API_KEY` остаётся fallback для CI и opt-in live smoke tests, если Secret Service недоступен или запись не найдена
 - `whisper-cli --help` и `whisper-cli completion bash` не требуют `API key`, `secret-tool`, `ffmpeg` или provider preflight
+- единственная поддерживаемая OpenAI-модель и OpenAI default — `gpt-transcribe`; старые явные model IDs завершают запуск ошибкой
 
 ## Локальный quality loop
 
@@ -37,7 +38,6 @@
 Запускаются только по `opt-in`. В `make ci` не входят.
 
 - `make test-live-openai LIVE_AUDIO_FILE=/abs/path/audio.m4a`
-- `make test-live-openai-diarize LIVE_AUDIO_FILE=/abs/path/audio.m4a`
 - `make test-live-groq LIVE_AUDIO_FILE=/abs/path/audio.m4a`
 
 Требования:

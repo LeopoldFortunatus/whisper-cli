@@ -13,16 +13,20 @@ import (
 )
 
 type responsePayload struct {
-	Text     string           `json:"text"`
-	Language string           `json:"language"`
-	Segments []segmentPayload `json:"segments"`
+	Text      string            `json:"text"`
+	Language  string            `json:"language"`
+	Languages []languagePayload `json:"languages"`
+	Segments  []segmentPayload  `json:"segments"`
+}
+
+type languagePayload struct {
+	Code string `json:"code"`
 }
 
 type segmentPayload struct {
-	Start   float64 `json:"start"`
-	End     float64 `json:"end"`
-	Text    string  `json:"text"`
-	Speaker string  `json:"speaker"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+	Text  string  `json:"text"`
 }
 
 type statusCoder interface {
@@ -49,6 +53,14 @@ func ParseOpenAICompatibleTranscript(providerName domain.Provider, model string,
 		transcript.Text = strings.TrimSpace(payload.Text)
 	}
 	transcript.Language = strings.TrimSpace(payload.Language)
+	if transcript.Language == "" {
+		for _, language := range payload.Languages {
+			if code := strings.TrimSpace(language.Code); code != "" {
+				transcript.Language = code
+				break
+			}
+		}
+	}
 
 	for _, segment := range payload.Segments {
 		if strings.TrimSpace(segment.Text) == "" {
@@ -59,14 +71,6 @@ func ParseOpenAICompatibleTranscript(providerName domain.Provider, model string,
 			End:   segment.End,
 			Text:  strings.TrimSpace(segment.Text),
 		})
-		if strings.TrimSpace(segment.Speaker) != "" {
-			transcript.SpeakerSegments = append(transcript.SpeakerSegments, domain.SpeakerSegment{
-				Start:   segment.Start,
-				End:     segment.End,
-				Speaker: strings.TrimSpace(segment.Speaker),
-				Text:    strings.TrimSpace(segment.Text),
-			})
-		}
 	}
 
 	if transcript.Text == "" {

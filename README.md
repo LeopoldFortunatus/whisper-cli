@@ -10,7 +10,7 @@ Go CLI для локальной транскрипции медиафайлов
 - последовательно обрабатывает несколько inputs через `whisper-cli --input *.m4a`
 - по умолчанию пишет рядом с source только `<media-stem>.txt`
 - хранит canonical `transcript.json`, converted source и chunks в системном cache
-- опционально пишет stem-prefixed timestamps, subtitles, diarization и raw artifacts
+- опционально пишет stem-prefixed timestamps, subtitles и raw artifacts
 - поддерживает OpenAI и Groq
 
 ## Приоритет конфигурации
@@ -23,7 +23,9 @@ Go CLI для локальной транскрипции медиафайлов
 
 Runtime `YAML`-конфиг больше не поддерживается. CLI использует GNU long flags вроде `--input`, `--provider` и `--output-dir`.
 
-Если `--provider` и `--model` не заданы, CLI по умолчанию использует `provider=openai` и модель `gpt-4o-transcribe`.
+Если `--provider` и `--model` не заданы, CLI по умолчанию использует `provider=openai` и модель `gpt-transcribe`.
+
+Для OpenAI поддерживается только `gpt-transcribe`. Старые явно заданные OpenAI model IDs не переписываются на default и завершают запуск ошибкой. Generic `--model` и `WHISPER_CLI_MODEL` остаются для моделей Groq и будущих providers.
 
 ## API keys
 
@@ -96,7 +98,7 @@ make build
 ./bin/whisper-cli \
   --input /path/to/media.mp4 \
   --provider openai \
-  --model gpt-4o-transcribe
+  --model gpt-transcribe
 ```
 
 Результат будет записан в `/path/to/media.txt`.
@@ -120,7 +122,7 @@ GROQ_API_KEY=... ./bin/whisper-cli \
 
 `--output-dir` собирает public artifacts плоско в указанном каталоге. До первого provider request CLI проверяет, что разные inputs не претендуют на один output path.
 
-Default `outputs=none`. Для моделей без `segment timestamps` явно запрошенный `timestamps` автоматически отключается с warning. `gpt-4o-transcribe-diarize` без явного `--outputs diarized` также пишет наружу только plain TXT.
+Default `outputs=none`. Для моделей без `segment timestamps`, включая `gpt-transcribe`, явно запрошенный `timestamps` автоматически отключается с warning.
 
 CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wav`, `webm` как входные media extensions.
 Любой поддерживаемый non-`m4a` input сначала конвертируется в системном cache, после чего chunking идёт уже по подготовленному файлу.
@@ -147,25 +149,23 @@ CLI распознаёт `flac`, `m4a`, `mp3`, `mp4`, `mpeg`, `mpga`, `ogg`, `wa
 
 `--outputs` управляет только дополнительными public artifacts. Default — `none`; plain `<stem>.txt` и cached `transcript.json` создаются всегда. Если модель не поддерживает `segment timestamps`, `timestamps` автоматически отключается с warning.
 
+Для `provider=openai` значение `--language` передаётся `gpt-transcribe` как один элемент `languages[]`. CLI сохраняет singular flag, чтобы не менять общий provider-independent интерфейс.
+
 Поддерживаемые optional outputs:
 
 - `timestamps`
 - `srt`
 - `vtt`
-- `diarized`
 - `raw`
 - `none`
 
 ## Матрица provider'ов
 
-| Provider | Модель | Сегменты | SRT/VTT | Диаризация |
-| --- | --- | --- | --- | --- |
-| OpenAI | `whisper-1` | да | да | нет |
-| OpenAI | `gpt-4o-transcribe` | нет | нет | нет |
-| OpenAI | `gpt-4o-mini-transcribe` | нет | нет | нет |
-| OpenAI | `gpt-4o-transcribe-diarize` | без subtitle-артефактов | нет | да |
-| Groq | `whisper-large-v3` | да | да | нет |
-| Groq | `whisper-large-v3-turbo` | да | да | нет |
+| Provider | Модель | Сегменты | SRT/VTT |
+| --- | --- | --- | --- |
+| OpenAI | `gpt-transcribe` | нет | нет |
+| Groq | `whisper-large-v3` | да | да |
+| Groq | `whisper-large-v3-turbo` | да | да |
 
 OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/arykalin/go/src/github.com/arykalin/whisper-cli/docs/ROADMAP.md) и [`docs/tech-debt-tracker.md`](/home/arykalin/go/src/github.com/arykalin/whisper-cli/docs/tech-debt-tracker.md).
 
@@ -175,12 +175,11 @@ OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/a
 
 - `/records/lecture.txt`
 
-При явном `--outputs timestamps,srt,vtt,diarized,raw` имена дополнительных public artifacts строятся от source stem:
+При явном `--outputs timestamps,srt,vtt,raw` имена дополнительных public artifacts строятся от source stem:
 
 - `lecture.timestamps.txt`
 - `lecture.srt`
 - `lecture.vtt`
-- `lecture.diarized.json`
 - `lecture.raw.json`
 
 Служебные данные последнего запуска хранятся в `<os-user-cache>/whisper-cli/<sha256-absolute-input>/`:
@@ -206,7 +205,6 @@ OpenRouter пока не реализован: см. [`docs/ROADMAP.md`](/home/a
 Опциональные `live smoke tests`:
 
 - `make test-live-openai LIVE_AUDIO_FILE=/abs/path/audio.m4a`
-- `make test-live-openai-diarize LIVE_AUDIO_FILE=/abs/path/audio.m4a`
 - `make test-live-groq LIVE_AUDIO_FILE=/abs/path/audio.m4a`
 
 ## Документация

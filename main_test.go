@@ -35,13 +35,18 @@ func TestBashCompletionSmoke(t *testing.T) {
 		t.Fatalf("provider completion = %v, want [openai]", providers)
 	}
 
+	openAIModels := completeWords(t, dir, scriptPath, []string{"whisper-cli", "--provider", "openai", "--model", "gpt"})
+	if !slices.Equal(openAIModels, []string{"gpt-transcribe"}) {
+		t.Fatalf("OpenAI model completion = %v, want [gpt-transcribe]", openAIModels)
+	}
+
 	models := completeWords(t, dir, scriptPath, []string{"whisper-cli", "--provider", "groq", "--model", "whisper"})
 	wantModels := []string{"whisper-large-v3", "whisper-large-v3-turbo"}
 	if !slices.Equal(models, wantModels) {
 		t.Fatalf("model completion = %v, want %v", models, wantModels)
 	}
 	for _, reply := range models {
-		if strings.Contains(reply, "gpt-4o") {
+		if strings.HasPrefix(reply, "gpt-") {
 			t.Fatalf("unexpected openai model in groq completion: %v", models)
 		}
 	}

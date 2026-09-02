@@ -79,8 +79,8 @@ func TestResolveUsesDefaultsWithoutEnv(t *testing.T) {
 	if cfg.Provider != domain.ProviderOpenAI {
 		t.Fatalf("provider = %s, want %s", cfg.Provider, domain.ProviderOpenAI)
 	}
-	if cfg.Model != "gpt-4o-transcribe" {
-		t.Fatalf("model = %s, want gpt-4o-transcribe", cfg.Model)
+	if cfg.Model != "gpt-transcribe" {
+		t.Fatalf("model = %s, want gpt-transcribe", cfg.Model)
 	}
 	if len(cfg.Inputs) != 1 || cfg.Inputs[0] != "input.m4a" {
 		t.Fatalf("inputs = %v, want [input.m4a]", cfg.Inputs)
@@ -93,6 +93,19 @@ func TestResolveUsesDefaultsWithoutEnv(t *testing.T) {
 	}
 	if len(cfg.Outputs) != 0 {
 		t.Fatalf("outputs = %#v, want none", cfg.Outputs)
+	}
+}
+
+func TestResolveRejectsRemovedDiarizedOutput(t *testing.T) {
+	t.Parallel()
+
+	overrides := Overrides{}
+	overrides.Input.SetValue("input.m4a")
+	overrides.Outputs.SetValue("diarized")
+
+	_, err := Resolve(overrides, mapEnv{})
+	if err == nil || !strings.Contains(err.Error(), `unsupported output artifact "diarized"`) {
+		t.Fatalf("Resolve error = %v", err)
 	}
 }
 

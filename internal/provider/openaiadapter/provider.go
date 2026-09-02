@@ -12,11 +12,10 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
-	"github.com/openai/openai-go/shared/constant"
 	"github.com/rs/zerolog"
 )
 
-const diarizeModel = "gpt-4o-transcribe-diarize"
+const modelGPTTranscribe = "gpt-transcribe"
 
 type requester interface {
 	Transcribe(ctx context.Context, params openai.AudioTranscriptionNewParams) (*openai.Transcription, error)
@@ -109,24 +108,15 @@ func (p *Provider) Transcribe(ctx context.Context, req provider.Request) (provid
 		}()
 
 		params := openai.AudioTranscriptionNewParams{
-			File:     file,
-			Model:    req.Model,
-			Language: param.NewOpt(req.Language),
+			File:           file,
+			Model:          req.Model,
+			ResponseFormat: openai.AudioResponseFormatJSON,
+		}
+		if req.Language != "" {
+			params.SetExtraFields(map[string]any{"languages[]": req.Language})
 		}
 		if req.Prompt != "" && caps.SupportsPrompt {
 			params.Prompt = param.NewOpt(req.Prompt)
-		}
-
-		if caps.SupportsDiarization {
-			params.ResponseFormat = openai.AudioResponseFormat("diarized_json")
-			params.ChunkingStrategy = openai.AudioTranscriptionNewParamsChunkingStrategyUnion{
-				OfAuto: constant.ValueOf[constant.Auto](),
-			}
-		} else if caps.SupportsSegmentTimestamps {
-			params.ResponseFormat = openai.AudioResponseFormatVerboseJSON
-			params.TimestampGranularities = []string{"segment"}
-		} else {
-			params.ResponseFormat = openai.AudioResponseFormatJSON
 		}
 
 		resp, err := p.requester.Transcribe(ctx, params)
@@ -150,19 +140,7 @@ func (p *Provider) Transcribe(ctx context.Context, req provider.Request) (provid
 }
 
 var capabilities = map[string]domain.Capabilities{
-	openai.AudioModelWhisper1: {
-		SupportsPrompt:            true,
-		SupportsSegmentTimestamps: true,
-		SupportsSRT:               true,
-		SupportsVTT:               true,
-	},
-	openai.AudioModelGPT4oTranscribe: {
+	modelGPTTranscribe: {
 		SupportsPrompt: true,
-	},
-	openai.AudioModelGPT4oMiniTranscribe: {
-		SupportsPrompt: true,
-	},
-	diarizeModel: {
-		SupportsDiarization: true,
 	},
 }
